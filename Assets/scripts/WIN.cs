@@ -35,8 +35,6 @@ public class WIN : MonoBehaviour
 
     void Update()
     {
-        Debug.Log(time);
-        
         time += Time.deltaTime;
 
         if (time>=60)
