@@ -34,8 +34,8 @@ public static class GameSetup
         dst.antialiasingQuality = AntialiasingQuality.High;
         log.AppendLine("Game root + Menu Camera");
 
-        var mwnu = ShotTool.Find("MWNU"); mwnu.SetActive(false);
-        log.AppendLine("MWNU disabled (old sprite menu)");
+        var mwnu = ShotTool.Find("MWNU");
+        if (mwnu) { Object.DestroyImmediate(mwnu); log.AppendLine("old sprite menu (MWNU) removed"); }
 
         var oldHud = ShotTool.Find("JOGANDO/Canvas");
         if (oldHud) { Object.DestroyImmediate(oldHud); log.AppendLine("old HUD canvas (WIN, marcador texts) removed"); }

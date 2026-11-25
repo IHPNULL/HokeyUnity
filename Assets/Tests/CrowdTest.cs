@@ -14,7 +14,6 @@ public class CrowdTest
     {
         SceneManager.LoadScene("MENU");
         yield return null;
-        Find("MWNU").SetActive(false);
         Find("JOGANDO").SetActive(true);
         yield return null; yield return null;
 

@@ -17,7 +17,6 @@ public class ImpactSoundTest
     {
         SceneManager.LoadScene("MENU");
         yield return null;
-        Find("MWNU").SetActive(false);
         Find("JOGANDO").SetActive(true);
         yield return new WaitForSeconds(1.5f); // puck settles
 

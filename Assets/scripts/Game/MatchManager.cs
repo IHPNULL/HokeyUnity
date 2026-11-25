@@ -37,6 +37,8 @@ public class MatchManager : MonoBehaviour
     int seenRed, seenBlue;
     State beforePause;
     float menuAngle;
+    AudioSource music; float musicVolume = 0.7f;
+    int lastBeep;
 
     const float CountdownTime = 3f, GoalPauseTime = 2.2f, PeriodBreakTime = 3.5f;
 
@@ -55,6 +57,9 @@ public class MatchManager : MonoBehaviour
         ai.enabled = false;
         AudioListener.volume = GameConfig.volume;
         ArenaTheme.Apply(GameConfig.arena);
+        GameSfx.Init(gameObject);
+        foreach (var r in gameObject.scene.GetRootGameObjects())
+            if (r.name == "Audio Source" && r.TryGetComponent(out music)) { music.loop = true; musicVolume = music.volume; if (!music.isPlaying) music.Play(); }
         EnterMenu();
     }
 
@@ -167,7 +172,9 @@ public class MatchManager : MonoBehaviour
 
             case State.Countdown:
                 SyncSeen();
-                if (stateTime >= CountdownTime) { moverp1.Frozen = false; SetState(State.Playing); Banner?.Invoke("VALENDO!", Color.white); }
+                int n = Mathf.CeilToInt(CountdownTime - stateTime);
+                if (n != lastBeep && n > 0) { lastBeep = n; GameSfx.Beep(); }
+                if (stateTime >= CountdownTime) { moverp1.Frozen = false; lastBeep = 0; GameSfx.Go(); SetState(State.Playing); Banner?.Invoke("VALENDO!", Color.white); }
                 break;
 
             case State.Playing:
@@ -201,6 +208,7 @@ public class MatchManager : MonoBehaviour
         if (r == seenRed && b == seenBlue) return;
         Team scorer = r > seenRed ? Team.Red : Team.Blue;
         SyncSeen();
+        GameSfx.Horn();
         Banner?.Invoke(scorer == Team.Red ? "GOL DO VERMELHO!" : "GOL DO AZUL!", scorer == Team.Red ? RedColor : BlueColor);
 
         if (suddenDeath || r >= GameConfig.goalsPerPeriod || b >= GameConfig.goalsPerPeriod) { EndPeriod(scorer); return; }
@@ -213,6 +221,7 @@ public class MatchManager : MonoBehaviour
         int r = marcadorverm.pontosverm, b = marcadorazul.pontosazul;
         if (r == b)
         {
+            GameSfx.Buzzer();
             suddenDeath = true;
             Banner?.Invoke("MORTE SÚBITA!", new Color(1f, 0.8f, 0.2f));
             Kickoff();
@@ -225,6 +234,7 @@ public class MatchManager : MonoBehaviour
     {
         if (winner == Team.Red) periodsRed++; else periodsBlue++;
         moverp1.Frozen = true;
+        GameSfx.Buzzer();
         if (periodsRed >= 2 || periodsBlue >= 2)
         {
             matchWinner = periodsRed >= 2 ? Team.Red : Team.Blue;
@@ -240,6 +250,8 @@ public class MatchManager : MonoBehaviour
     void SetState(State s, bool keepTime = false)
     {
         state = s;
+        if (music) music.volume = (s == State.Menu || s == State.Result) ? musicVolume : musicVolume * 0.3f;
+        if (s == State.Countdown) lastBeep = 0;
         if (!keepTime) stateTime = 0f;
         StateChanged?.Invoke();
     }

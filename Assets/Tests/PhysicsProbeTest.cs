@@ -18,7 +18,6 @@ public class PhysicsProbeTest
     {
         SceneManager.LoadScene("MENU");
         yield return null;
-        Find("MWNU").SetActive(false);
         Find("JOGANDO").SetActive(true);
         puck = Find("PUCK"); red = Find("unidadeverm"); blue = Find("Unidadeazul");
         prb = puck.GetComponent<Rigidbody>();

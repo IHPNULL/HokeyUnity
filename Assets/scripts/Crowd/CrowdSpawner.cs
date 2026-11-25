@@ -91,6 +91,7 @@ public class CrowdSpawner : MonoBehaviour
 
     void DrawGroup(int team, Material mat, int cheering, float t, bool cheerPose)
     {
+        if (!SystemInfo.supportsInstancing) return;   // headless / very old GPUs: skip the crowd quietly
         if (mat == null) return;
         var mesh = cheerPose ? cheerMesh : idleMesh;
         var rp = new RenderParams(mat) { shadowCastingMode = ShadowCastingMode.Off, receiveShadows = true, layer = gameObject.layer };

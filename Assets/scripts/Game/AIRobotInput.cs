@@ -23,6 +23,28 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
     static readonly float[] Offsets = { 0, 20, -20, 40, -40, 60, -60, 80, -80, 100, -100 };
     readonly RaycastHit[] hits = new RaycastHit[8];
 
+    // Pillars and goal posts in the straight path: detour around the side away from them.
+    Vector3 AvoidObstacles(Vector3 me, Vector3 target)
+    {
+        Vector3 d = target - me; float dist = d.magnitude;
+        if (dist < 1f) return target;
+        d /= dist;
+        int n = Physics.SphereCastNonAlloc(new Vector3(me.x, 70f, me.z), 55f, d, hits, dist, ~0, QueryTriggerInteraction.Ignore);
+        float best = float.MaxValue; Collider obstacle = null;
+        for (int i = 0; i < n; i++)
+        {
+            var c = hits[i].collider; var b = c.bounds.size;
+            if (c.attachedRigidbody != null || b.x > 300f || b.z > 300f || hits[i].distance <= 0f) continue;
+            if (hits[i].distance < best) { best = hits[i].distance; obstacle = c; }
+        }
+        if (obstacle == null) return target;
+        Vector3 oc = obstacle.bounds.center; oc.y = 0;
+        Vector3 side = Vector3.Cross(Vector3.up, d);
+        float s = Vector3.Dot(oc - me, side) > 0f ? -1f : 1f;
+        float r = Mathf.Max(obstacle.bounds.extents.x, obstacle.bounds.extents.z);
+        return oc + side * s * (r + 130f);
+    }
+
     // True when nothing static (boards, goal frame) is within dist of p along dir.
     bool Clear(Vector3 p, Vector3 dir, float dist)
     {
@@ -118,6 +140,8 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         if (inNet) { target = og - outward * 260f; lined = false; }
 
         Mode = inNet ? "exit" : defend ? "defend" : !room ? (ramHome ? "goal-side" : "ram") : lined ? "charge" : wrongSide ? "around" : "behind";
+
+        target = AvoidObstacles(me, target);
 
         target.x = Mathf.Clamp(target.x, RinkMinX + 60f, RinkMaxX - 60f);
         target.z = Mathf.Clamp(target.z, RinkMinZ + 60f, RinkMaxZ - 60f);

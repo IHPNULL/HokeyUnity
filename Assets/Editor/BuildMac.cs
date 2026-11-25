@@ -15,6 +15,6 @@ public static class BuildMac
             options = opts,
         });
         UnityEngine.Debug.Log("BUILD " + path + " " + report.summary.result);
-        if (report.summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded) EditorApplication.Exit(1);
+        if (report.summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded && UnityEngine.Application.isBatchMode) EditorApplication.Exit(1);
     }
 }
