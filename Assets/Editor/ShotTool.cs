@@ -44,6 +44,25 @@ public static class ShotTool
         }
     }
 
+    // Temporary camera at an arbitrary viewpoint (removed afterwards).
+    public static string CaptureFrom(Vector3 pos, Vector3 lookAt, string file, string show = "", string hide = "", float fov = 60f)
+    {
+        var go = new GameObject("__ShotCam") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var cam = go.AddComponent<Camera>();
+            cam.fieldOfView = fov; cam.nearClipPlane = 1f; cam.farClipPlane = 8000f;
+            var data = go.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+            data.renderPostProcessing = true;
+            data.antialiasing = UnityEngine.Rendering.Universal.AntialiasingMode.SubpixelMorphologicalAntiAliasing;
+            go.transform.position = pos; go.transform.LookAt(lookAt);
+            go.name = "__ShotCam";
+            go.hideFlags = HideFlags.None;
+            return Capture("__ShotCam", file, show, hide);
+        }
+        finally { Object.DestroyImmediate(go); }
+    }
+
     public static GameObject Find(string path) =>
         Resources.FindObjectsOfTypeAll<GameObject>().FirstOrDefault(g =>
         {
