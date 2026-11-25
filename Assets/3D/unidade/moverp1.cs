@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections;
 
 public class moverp1 : MonoBehaviour
@@ -24,18 +24,26 @@ public class moverp1 : MonoBehaviour
         private set;
     }
 
+    // Null = keyboard axes above. MatchManager sets this (AI for red in 1 Player).
+    public IRobotInput input;
+    // Robots hold still during menus, countdowns and goal replays.
+    public static bool Frozen;
+
     void Start()
     {
         b = GetComponent<Rigidbody>();
-        rot = mostradado.rotaao;
-        vel = mostradado.speed;
     }
 
     void FixedUpdate()
     {
         rotaçao = (b.transform.rotation);
-        float moveHorizontal = Input.GetAxis(horizontal);
-        float moveVertical = Input.GetAxis(vertical);
+        rot = mostradado.rotaao;
+        vel = mostradado.speed;
+        float moveHorizontal, moveVertical;
+        if (Frozen) { moveHorizontal = 0; moveVertical = 0; }
+        else if (input != null) { moveHorizontal = input.Drive; moveVertical = input.Turn; }
+        else { moveHorizontal = Input.GetAxis(horizontal); moveVertical = Input.GetAxis(vertical); }
+        Horizontal = moveHorizontal; Vertical = moveVertical;
 
 
         Physics.gravity = new Vector3(0, -1 * gravit, 0);
