@@ -41,6 +41,6 @@ public class moverp1 : MonoBehaviour
         Physics.gravity = new Vector3(0, -1 * gravit, 0);
 
         transform.Rotate(0, 0, moveVertical * rot);
-        b.velocity = (moveHorizontal * vel * -transform.up);
+        b.linearVelocity = (moveHorizontal * vel * -transform.up);
     }
   }
