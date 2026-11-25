@@ -31,9 +31,12 @@ public class ImpactSoundTest
         prb.linearVelocity = new Vector3(1200, 0, 0);
         float t = 0; while ((int)S("PlayCount") == before && t < 3) { t += Time.deltaTime; yield return null; }
         Assert.Greater((int)S("PlayCount"), before, "puck -> robot made no sound");
-        Assert.AreEqual("clink", (string)S("LastPlayed"));
+        Assert.AreEqual("clink", (string)S("LastPlayed"), "last impact: " + S("LastPair"));
 
         yield return new WaitForSeconds(0.3f);
+        // The puck now rebounds off the solid hull; park it away from the crash lane.
+        prb.linearVelocity = Vector3.zero; prb.position = new Vector3(634f, prb.position.y, 850f);
+        yield return new WaitForSeconds(0.2f);
         before = (int)S("PlayCount");
         var brb = blue.GetComponent<Rigidbody>();
         ((Behaviour)blue.GetComponent(T("moverp1"))).enabled = false; // stand in for a player driving at speed
@@ -42,6 +45,6 @@ public class ImpactSoundTest
         brb.linearVelocity = new Vector3(1400, 0, 0);
         t = 0; while ((int)S("PlayCount") == before && t < 3) { t += Time.deltaTime; yield return null; }
         Assert.Greater((int)S("PlayCount"), before, "robot -> robot made no sound");
-        Assert.AreEqual("clang", (string)S("LastPlayed"));
+        Assert.AreEqual("clang", (string)S("LastPlayed"), "last impact: " + S("LastPair"));
     }
 }

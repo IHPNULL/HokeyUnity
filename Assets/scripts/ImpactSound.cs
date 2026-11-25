@@ -71,12 +71,14 @@ public class ImpactSound : MonoBehaviour
         src.PlayOneShot(set[Random.Range(0, set.Length)], Volume * Mathf.Lerp(0.25f, 1f, t));
         lastTime = Time.time;
         LastPlayed = set == heavyClang ? "clang" : set == clink ? "clink" : "clank";
+        LastPair = name + "/" + c.GetContact(0).thisCollider.name + " <-> " + c.collider.name + " n=" + c.GetContact(0).normal.ToString("F2") + " v=" + speed.ToString("F0");
         PlayCount++;
     }
 
     // For tests.
     public static string LastPlayed;
     public static int PlayCount;
+    public static string LastPair;
 
     static void BuildClips()
     {
