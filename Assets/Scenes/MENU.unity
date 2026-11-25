@@ -3674,6 +3674,7 @@ Transform:
   - {fileID: 170076735}
   - {fileID: 1982722464}
   - {fileID: 1732097881}
+  - {fileID: 1391107499}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &636330936
@@ -8927,6 +8928,67 @@ SpriteRenderer:
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
+--- !u!1 &1391107498
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1391107499}
+  - component: {fileID: 1391107500}
+  m_Layer: 0
+  m_Name: Crowd
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1391107499
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1391107498}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 634081628}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1391107500
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1391107498}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56ee36aff342f4d469d9a06977222b22, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CrowdSpawner
+  idleMesh: {fileID: 4300000, guid: f37157e5f7b7642f4ae714118d8aca7e, type: 2}
+  cheerMesh: {fileID: 4300000, guid: d19988bc179f64cfc89a0a3bae15b4f6, type: 2}
+  redMat: {fileID: 2100000, guid: fdf337c15863d415fac3a8e10eb20e9e, type: 2}
+  blueMat: {fileID: 2100000, guid: 189b5e80a6c3b496eb1d60e8bec756c2, type: 2}
+  greyMat: {fileID: 2100000, guid: d2601e76134614192aa4513450941379, type: 2}
+  stands: {fileID: 1605824792}
+  terraceHeights:
+  - 150
+  - 400
+  - 700
+  spacing: 115
+  fanScale: 110
+  rinkMinMaxX: {x: -300, y: 1550}
+  rinkCenterZ: 400
+  rinkSplitX: 634
+  cheerSeconds: 3.5
+  crowdVolume: 0.55
 --- !u!1001 &1396558623
 PrefabInstance:
   m_ObjectHideFlags: 0
