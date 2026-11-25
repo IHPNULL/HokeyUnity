@@ -23,10 +23,11 @@ public class ScreenProbe
         RenderTexture.active = rt;
         var tex = new Texture2D(w, h, TextureFormat.RGB24, false);
         tex.ReadPixels(new Rect(0, 0, w, h), 0, 0); tex.Apply(); RenderTexture.active = null;
-        System.IO.File.WriteAllBytes(System.IO.Path.Combine(System.Environment.GetEnvironmentVariable("PROBE_DIR"), file), tex.EncodeToPNG());
+        System.IO.File.WriteAllBytes(System.IO.Path.Combine(System.Environment.GetEnvironmentVariable("PROBE_DIR") ?? System.IO.Path.GetTempPath(), file), tex.EncodeToPNG());
     }
 
-    [UnityTest]
+    // Review tool, not a check: run explicitly with PROBE_DIR set.
+    [UnityTest, Explicit]
     public IEnumerator Screens()
     {
         SceneManager.LoadScene("MENU");
