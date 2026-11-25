@@ -28,6 +28,8 @@ public class moverp1 : MonoBehaviour
     public IRobotInput input;
     // Robots hold still during menus, countdowns and goal replays.
     public static bool Frozen;
+    // 1 = robots stop and turn on a dime; lower = they skid (the ice arena).
+    public static float Grip = 1f;
 
     void Start()
     {
@@ -49,6 +51,7 @@ public class moverp1 : MonoBehaviour
         Physics.gravity = new Vector3(0, -1 * gravit, 0);
 
         transform.Rotate(0, 0, moveVertical * rot);
-        b.linearVelocity = (moveHorizontal * vel * -transform.up);
+        var wanted = moveHorizontal * vel * -transform.up;
+        b.linearVelocity = Grip >= 1f ? wanted : Vector3.Lerp(b.linearVelocity, wanted, Grip);
     }
   }

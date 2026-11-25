@@ -96,7 +96,7 @@ public class GameUI : MonoBehaviour
         Row(col, "Modo", () => GameConfig.kind == GameConfig.Kind.QuickMatch ? "Partida rápida" : "Torneio",
             d => GameConfig.kind = GameConfig.kind == GameConfig.Kind.QuickMatch ? GameConfig.Kind.Tournament : GameConfig.Kind.QuickMatch, OneP);
         Row(col, "Arena", () => ArenaTheme.Names[GameConfig.arena],
-            d => GameConfig.arena = (GameConfig.arena + d + ArenaTheme.Names.Length) % ArenaTheme.Names.Length, () => !Tour());
+            d => { GameConfig.arena = (GameConfig.arena + d + ArenaTheme.Names.Length) % ArenaTheme.Names.Length; ArenaTheme.Apply(GameConfig.arena); }, () => !Tour());
         Row(col, "Dificuldade", () => GameConfig.Name(GameConfig.difficulty),
             d => GameConfig.difficulty = (GameConfig.Difficulty)Mathf.Clamp((int)GameConfig.difficulty + d, 0, 2), () => OneP() && !Tour());
 

@@ -49,7 +49,7 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
 
     void FixedUpdate()
     {
-        if (puck == null) { Drive = Turn = 0; return; }
+        if (puck == null || moverp1.Frozen) { Drive = Turn = 0; stuckTime = 0; lastPos = transform.position; lastPos.y = 0; return; }
         float now = Time.time;
         seen.Enqueue((now, puck.position));
         while (seen.Count > 1 && seen.Peek().t < now - reactionDelay) seen.Dequeue();
@@ -104,6 +104,7 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
             target = p - shotDir * 140f + side * s * 170f;
             if (!Clear(p, target - p, (target - p).magnitude + RobotBack)) target = p - shotDir * 140f - side * s * 170f;
         }
+        else if (Vector3.Distance(me, behind) < 150f) target = p;   // at the setup spot: turn to face the puck
         else target = behind;
         // Defend: puck sliding toward our net and we're not between them -> race back to the goal mouth.
         Vector3 pv = (p - lastSeen) / Mathf.Max(Time.fixedDeltaTime, 1e-4f); lastSeen = p;

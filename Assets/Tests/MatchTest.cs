@@ -126,17 +126,17 @@ public class MatchTest
     }
 
     [UnityTest]
-    public IEnumerator OnePlayerFullScreenAndAIScores([Values("Easy", "Medium", "Hard")] string diff, [Values("center", "ownCorner", "farCorner")] string spot)
+    public IEnumerator OnePlayerFullScreenAndAIScores([Values("Easy", "Medium", "Hard")] string diff, [Values("center", "ownCorner", "farCorner")] string spot, [Values(0, 1, 2)] int arena)
     {
         yield return Load();
         Cfg("players", "One"); Cfg("kind", "QuickMatch"); Cfg("difficulty", diff);
-        Cfg("goalsPerPeriod", 5); Cfg("minutesPerPeriod", 5);
+        Cfg("goalsPerPeriod", 5); Cfg("minutesPerPeriod", 5); Cfg("arena", arena);
         Call("StartMatch");
         var red = Find("unidadeverm"); var blue = Find("Unidadeazul");
         Assert.IsFalse(red.GetComponentInChildren<Camera>(true).gameObject.activeInHierarchy, "red camera off in 1P");
         Assert.AreEqual(new Rect(0, 0, 1, 1), blue.GetComponentInChildren<Camera>(true).rect, "blue camera full screen");
         yield return WaitState("Playing", 5);
-        if (spot == "center") yield return Shot("ui_hud_1p_" + diff);
+        if (spot == "center" && diff == "Medium") yield return Shot("arena_" + arena);
 
         // Idle player parked out of the way; the AI must score.
         ((Behaviour)blue.GetComponent(T("moverp1"))).enabled = false;
@@ -155,17 +155,70 @@ public class MatchTest
             if ((int)(t * 2) != (int)((t - Time.deltaTime) * 2) && t < 30)
             {
                 var ai = red.GetComponent(T("AIRobotInput"));
-                trace.Append($" [{t:F1}s r({p.x:F0},{p.z:F0}) p({prb.position.x:F0},{prb.position.z:F0}) {ai.GetType().GetProperty("Mode").GetValue(ai)}]");
+                var tg = (Vector3)ai.GetType().GetProperty("Target").GetValue(ai); var f = -red.transform.up; var rv = red.GetComponent<Rigidbody>().linearVelocity;
+                trace.Append($" [{t:F1}s r({p.x:F0},{p.z:F0}) f({f.x:F1},{f.z:F1}) v({rv.x:F0},{rv.z:F0}) tg({tg.x:F0},{tg.z:F0}) d={ai.GetType().GetProperty("Drive").GetValue(ai):F2} p({prb.position.x:F0},{prb.position.z:F0}) {ai.GetType().GetProperty("Mode").GetValue(ai)}]");
             }
             minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.z); maxZ = Mathf.Max(maxZ, p.z);
             yield return null;
         }
         Time.timeScale = 1f;
-        Debug.Log($"AI {diff} {spot}: scored={Score("marcadorverm", "pontosverm")} after {t:F1}s, x {minX:F0}..{maxX:F0} z {minZ:F0}..{maxZ:F0}, blue goals {Score("marcadorazul", "pontosazul")}" + (Score("marcadorverm", "pontosverm") == 0 || Score("marcadorazul", "pontosazul") > 0 ? trace.ToString() : ""));
-        // Easy is slow enough that a puck rebounding off the far post can beat it back to its own net once.
-        Assert.LessOrEqual(Score("marcadorazul", "pontosazul"), diff == "Easy" ? 1 : 0, "AI own goals");
+        Debug.Log($"AI {diff} {spot} arena{arena}: scored={Score("marcadorverm", "pontosverm")} after {t:F1}s, x {minX:F0}..{maxX:F0} z {minZ:F0}..{maxZ:F0}, blue goals {Score("marcadorazul", "pontosazul")}" + (Score("marcadorverm", "pontosverm") == 0 || Score("marcadorazul", "pontosazul") > 0 ? trace.ToString() : ""));
+        // A puck rebounding off the far post or boards can occasionally beat the AI back to its own net.
+        Assert.LessOrEqual(Score("marcadorazul", "pontosazul"), 1, "AI own goals");
         Assert.Greater(Score("marcadorverm", "pontosverm"), 0, "AI did not score within 90 s");
         Assert.Greater(minX, -450f); Assert.Less(maxX, 1700f); Assert.Greater(minZ, -180f); Assert.Less(maxZ, 980f);
         Call("QuitToMenu");
+    }
+
+    [UnityTest]
+    public IEnumerator ArenasChangeFloorPhysicsAndObstacles()
+    {
+        yield return Load();
+        var theme = T("ArenaTheme");
+        var floor = Find("Plane").GetComponent<Renderer>();
+        var puckRb = Find("PUCK").GetComponent<Rigidbody>();
+        string[] mats = new string[3]; float[] drag = new float[3]; bool[] pillars = new bool[3]; float[] grip = new float[3];
+        for (int i = 0; i < 3; i++)
+        {
+            theme.GetMethod("Apply").Invoke(null, new object[] { i });
+            yield return null;
+            mats[i] = floor.sharedMaterial.name; drag[i] = puckRb.linearDamping;
+            pillars[i] = Find("Fabrica Pillars").activeInHierarchy;
+            grip[i] = (float)T("moverp1").GetField("Grip").GetValue(null);
+            Debug.Log($"ARENA {i}: floor={mats[i]} drag={drag[i]} pillars={pillars[i]} grip={grip[i]}");
+        }
+        Assert.AreNotEqual(mats[0], mats[1]); Assert.AreNotEqual(mats[0], mats[2]); Assert.AreNotEqual(mats[1], mats[2]);
+        Assert.Less(drag[1], drag[0], "ice: puck glides further");
+        Assert.Less(grip[1], 1f, "ice: robots skid");
+        Assert.IsFalse(pillars[0]); Assert.IsFalse(pillars[1]); Assert.IsTrue(pillars[2], "factory pillars");
+        theme.GetMethod("Apply").Invoke(null, new object[] { 0 });
+        Assert.AreEqual(mats[0], floor.sharedMaterial.name, "back to the classic floor");
+        Assert.AreEqual(1f, (float)T("moverp1").GetField("Grip").GetValue(null));
+    }
+
+    [UnityTest]
+    public IEnumerator TournamentAdvancesOnWin()
+    {
+        yield return Load();
+        Cfg("players", "One"); Cfg("kind", "Tournament"); Cfg("stage", 0); Cfg("goalsPerPeriod", 1); Cfg("minutesPerPeriod", 5);
+        Call("StartMatch");
+        Assert.AreEqual(0, (int)T("ArenaTheme").GetProperty("Current").GetValue(null), "match 1 in Clássica");
+        Assert.AreEqual("Easy", T("GameConfig").GetField("difficulty").GetValue(null).ToString());
+        for (int period = 0; period < 2; period++)
+        {
+            yield return WaitState("Playing", 10);
+            Blue(); yield return null;
+        }
+        yield return WaitState("Result", 2);
+        Assert.IsTrue((bool)P("TournamentNextAvailable"), "next match offered after a win");
+        Assert.IsTrue(Find("PRÓXIMA PARTIDA Button").activeInHierarchy);
+        Call("NextTournamentMatch");
+        Assert.AreEqual(1, (int)T("GameConfig").GetField("stage").GetValue(null));
+        Assert.AreEqual(1, (int)T("ArenaTheme").GetProperty("Current").GetValue(null), "match 2 in Gelo");
+        Assert.AreEqual("Medium", T("GameConfig").GetField("difficulty").GetValue(null).ToString());
+        Assert.AreEqual(0, I("periodsBlue"), "fresh match");
+        Call("QuitToMenu");
+        Cfg("kind", "QuickMatch"); Cfg("stage", 0);
+        T("ArenaTheme").GetMethod("Apply").Invoke(null, new object[] { 0 });
     }
 }

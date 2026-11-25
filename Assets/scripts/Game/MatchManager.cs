@@ -54,6 +54,7 @@ public class MatchManager : MonoBehaviour
         ai.puck = puckGo.transform;
         ai.enabled = false;
         AudioListener.volume = GameConfig.volume;
+        ArenaTheme.Apply(GameConfig.arena);
         EnterMenu();
     }
 
