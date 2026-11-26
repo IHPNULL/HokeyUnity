@@ -982,6 +982,12 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 335694932}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &346780168 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: -927199367670048503, guid: 0b5696fcdc6f4d44da072a69e7fc2424,
+    type: 3}
+  m_PrefabInstance: {fileID: 1110465038}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &356394523
 GameObject:
   m_ObjectHideFlags: 0
@@ -1537,6 +1543,19 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 1110465038}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &579334659
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 346780168}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 386f106a16715496a91c2cfb8353989d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ScoreboardDisplay
+  flashSeconds: 3
 --- !u!1 &626839220
 GameObject:
   m_ObjectHideFlags: 0
@@ -3708,7 +3727,11 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: -927199367670048503, guid: 0b5696fcdc6f4d44da072a69e7fc2424,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 579334659}
   m_SourcePrefab: {fileID: 100100000, guid: 0b5696fcdc6f4d44da072a69e7fc2424, type: 3}
 --- !u!1 &1116138049
 GameObject:
