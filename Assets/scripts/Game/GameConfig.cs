@@ -17,6 +17,13 @@ public static class GameConfig
     public static int goalsPerPeriod = 3;    // a period also ends when a team reaches this
     public static float volume = 0.8f;
 
+    // Robot picks (RobotSpec ids). 1x1 uses slot 0; 3x3 uses all three.
+    public static string[] blueRobots = { "omega", "faisca", "trator" };
+    public static string[] redRobots = { "omega", "canhao", "ima" };
+    public static string[] Robots(bool blue) => blue ? blueRobots : redRobots;
+    public static int RobotsPerTeam => format == Format.ThreeVsThree ? 3 : 1;
+    public static bool WithinBudget(bool blue) => RobotsPerTeam < 3 || RobotCatalog.TeamWeight(Robots(blue), 3) <= RobotCatalog.TeamWeightBudget;
+
     // Robot handling (old menu: mostradado.speed / rotaao).
     public static float speed { get => mostradado.speed; set => mostradado.speed = value; }
     public static int rotation { get => mostradado.rotaao; set => mostradado.rotaao = value; }

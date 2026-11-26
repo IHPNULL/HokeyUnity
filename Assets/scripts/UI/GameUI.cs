@@ -14,7 +14,9 @@ public class GameUI : MonoBehaviour
     Sprite round, circle;
     RectTransform root;
 
-    GameObject title, setup, hud, pause, result;
+    GameObject title, setup, robots, hud, pause, result;
+    readonly List<(Text text, Func<string> get, Func<bool> visible)> dyn = new();   // robot screen labels
+    Button startButton; Text robotsHint;
     Text setupHeader, setupHint, ladderText;
     readonly List<(GameObject row, Text value, Func<string> get, Func<bool> visible)> rows = new();
 
@@ -60,7 +62,7 @@ public class GameUI : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize; scaler.referenceResolution = new Vector2(1920, 1080); scaler.matchWidthOrHeight = 0.5f;
         root = (RectTransform)cgo.transform;
 
-        BuildTitle(); BuildSetup(); BuildHud(); BuildPause(); BuildResult();
+        BuildTitle(); BuildSetup(); BuildRobots(); BuildHud(); BuildPause(); BuildResult();
     }
 
     void BuildTitle()
@@ -115,7 +117,59 @@ public class GameUI : MonoBehaviour
 
         var buttons = RowGroup("Buttons", col, 880, 96, 24);
         Btn(buttons, "VOLTAR", () => { setup.SetActive(false); title.SetActive(true); Select(title); }, 300, 84, false, ghost: true);
-        Btn(buttons, "JOGAR", Play, 420, 84, true);
+        Btn(buttons, "JOGAR", OpenRobots, 420, 84, true);
+    }
+
+    // Robot picker: one slot per robot (1x1: 1 per team, 3x3: 3), stats under each, 3x3 weight budget.
+    void BuildRobots()
+    {
+        robots = Stretch("Robots", root);
+        var panel = Img("Panel", robots.transform, Bg, round);
+        var pr = panel.rectTransform; pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f); pr.sizeDelta = new Vector2(1760, 800);
+        var col = Column("Col", panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(1680, 740), 14);
+        var h = Label(col, "ESCOLHA OS ROBÔS", 56, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold); Size(h, 1680, 76);
+
+        var teamsRow = RowGroup("Teams", col, 1680, 470, 40);
+        for (int t = 1; t >= 0; t--)
+        {
+            bool blue = t == 1;
+            var c = new GameObject(blue ? "Blue Team" : "Red Team", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement)).transform;
+            c.SetParent(teamsRow, false);
+            var le = c.GetComponent<LayoutElement>(); le.preferredWidth = 800; le.preferredHeight = 470;
+            var v = c.GetComponent<VerticalLayoutGroup>(); v.spacing = 6; v.childAlignment = TextAnchor.UpperCenter;
+            v.childControlWidth = v.childControlHeight = true; v.childForceExpandWidth = v.childForceExpandHeight = false;
+
+            var head = Label(c, "", 32, blue ? MatchManager.BlueColor : MatchManager.RedColor, TextAnchor.MiddleLeft, FontStyle.Bold); Size(head, 800, 48);
+            dyn.Add((head, () => blue ? "AZUL" + (GameConfig.players == GameConfig.Players.One ? " · você" : "") : "VERMELHO" + (GameConfig.players == GameConfig.Players.One ? " · computador" : ""), () => true));
+            for (int i = 0; i < 3; i++)
+            {
+                int slot = i;
+                Func<bool> vis = () => slot < GameConfig.RobotsPerTeam;
+                Row(c, (blue ? "Azul " : "Vermelho ") + (i + 1), () => RobotCatalog.Get(GameConfig.Robots(blue)[slot])?.displayName ?? "-",
+                    d => { var ids = GameConfig.Robots(blue); ids[slot] = RobotCatalog.Next(ids[slot], d); if (mm) mm.ApplyLoadouts(); }, vis, 800);
+                var st = Label(c, "", 22, Dim, TextAnchor.MiddleLeft); Size(st, 800, 30);
+                dyn.Add((st, () => "   " + RobotCatalog.Stats(RobotCatalog.Get(GameConfig.Robots(blue)[slot])), vis));
+            }
+            var budget = Label(c, "", 24, Dim, TextAnchor.MiddleLeft, FontStyle.Bold); Size(budget, 800, 40);
+            dyn.Add((budget, () =>
+            {
+                float w = RobotCatalog.TeamWeight(GameConfig.Robots(blue), 3);
+                return GameConfig.WithinBudget(blue) ? $"Peso do time: {w:0} / {RobotCatalog.TeamWeightBudget:0} kg" : $"<color=#ff6b6b>Peso do time: {w:0} / {RobotCatalog.TeamWeightBudget:0} kg: acima do limite</color>";
+            }, () => GameConfig.RobotsPerTeam == 3));
+        }
+
+        robotsHint = Label(col, "", 24, Dim, TextAnchor.MiddleCenter); Size(robotsHint, 1680, 40);
+        var buttons = RowGroup("Buttons", col, 1680, 96, 24);
+        Btn(buttons, "VOLTAR", () => { robots.SetActive(false); setup.SetActive(true); RefreshSetup(); Select(setup); }, 300, 84, false, ghost: true);
+        startButton = Btn(buttons, "COMEÇAR", Play, 420, 84, true);
+        robots.SetActive(false);
+    }
+
+    void OpenRobots()
+    {
+        setup.SetActive(false); robots.SetActive(true);
+        if (mm) mm.ApplyLoadouts();
+        RefreshSetup(); Select(robots);
     }
 
     void BuildHud()
@@ -194,7 +248,8 @@ public class GameUI : MonoBehaviour
     void Play()
     {
         if (GameConfig.kind == GameConfig.Kind.Tournament) GameConfig.stage = 0;
-        setup.SetActive(false);
+        if (!GameConfig.WithinBudget(true) || !GameConfig.WithinBudget(false)) return;
+        setup.SetActive(false); robots.SetActive(false);
         mm.StartMatch();
     }
 
@@ -214,6 +269,11 @@ public class GameUI : MonoBehaviour
         bool one = GameConfig.players == GameConfig.Players.One;
         setupHeader.text = one ? "1 JOGADOR" : "2 JOGADORES";
         foreach (var r in rows) { r.row.SetActive(r.visible()); r.value.text = r.get(); }
+        foreach (var d in dyn) { d.text.gameObject.SetActive(d.visible()); d.text.text = d.get(); }
+        bool ok = GameConfig.WithinBudget(true) && GameConfig.WithinBudget(false);
+        if (startButton) startButton.interactable = ok;
+        if (robotsHint) robotsHint.text = !ok ? "Um time passou do limite de peso: troque um robô mais pesado."
+            : GameConfig.players == GameConfig.Players.One ? "Ferramenta: Espaço ou Enter" : "Ferramenta: AZUL Espaço · VERMELHO Enter";
         bool tour = one && GameConfig.kind == GameConfig.Kind.Tournament;
         ladderText.gameObject.SetActive(tour);
         if (tour)
@@ -232,8 +292,8 @@ public class GameUI : MonoBehaviour
     {
         var s = mm.state;
         bool menu = s == MatchManager.State.Menu;
-        if (menu) { if (!setup.activeSelf) { title.SetActive(true); Select(title); } }
-        else { title.SetActive(false); setup.SetActive(false); }
+        if (menu) { if (!setup.activeSelf && !robots.activeSelf) { title.SetActive(true); Select(title); } }
+        else { title.SetActive(false); setup.SetActive(false); robots.SetActive(false); }
         hud.SetActive(!menu);
         pause.SetActive(s == MatchManager.State.Paused);
         result.SetActive(s == MatchManager.State.Result);
@@ -310,14 +370,15 @@ public class GameUI : MonoBehaviour
             else { var c = bannerText.color; c.a = Mathf.Clamp01(left / 0.4f); bannerText.color = c; }
         }
         if (setup.activeSelf && Input.GetKeyDown(KeyCode.Escape)) { setup.SetActive(false); title.SetActive(true); Select(title); }
+        else if (robots.activeSelf && Input.GetKeyDown(KeyCode.Escape)) { robots.SetActive(false); setup.SetActive(true); RefreshSetup(); Select(setup); }
     }
 
     // ---- small UI kit ------------------------------------------------------------------------
 
-    void Row(Transform parent, string label, Func<string> get, Action<int> change, Func<bool> visible)
+    void Row(Transform parent, string label, Func<string> get, Action<int> change, Func<bool> visible, float width = 880)
     {
         var bg = Img(label, parent, Panel2, round);
-        var le = bg.gameObject.AddComponent<LayoutElement>(); le.preferredWidth = 880; le.preferredHeight = 64;
+        var le = bg.gameObject.AddComponent<LayoutElement>(); le.preferredWidth = width; le.preferredHeight = 64;
         var l = Label(bg.transform, label, 32, Color.white, TextAnchor.MiddleLeft); Fill(l.rectTransform); l.rectTransform.offsetMin = new Vector2(28, 0);
         Text value = null;
         var minus = Btn(bg.transform, "‹", () => { change(-1); RefreshSetup(); }, 64, 56, false);

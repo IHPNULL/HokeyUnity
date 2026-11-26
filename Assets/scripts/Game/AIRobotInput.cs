@@ -22,10 +22,15 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
 
     public float Drive { get; private set; }
     public float Turn { get; private set; }
+    public bool Action { get; private set; }   // use the robot's tool
     public Vector3 Target { get; private set; }
     public string Mode { get; private set; }
 
-    const float Behind = 110f, RobotBack = 70f;
+    const float BaseBehind = 110f, BaseRobotBack = 70f;
+    float Size => transform.lossyScale.x / 100f;   // RobotSpec.size (chassis is 100x at size 1)
+    float Behind => BaseBehind * Mathf.Max(1f, Size);
+    float RobotBack => BaseRobotBack * Size;
+    RobotTools tools;
     static readonly float[] Offsets = { 0, 20, -20, 40, -40, 60, -60, 80, -80, 100, -100 };
     readonly RaycastHit[] hits = new RaycastHit[8];
 
@@ -81,7 +86,7 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
 
     void FixedUpdate()
     {
-        if (puck == null || moverp1.Frozen) { Drive = Turn = 0; stuckTime = 0; lastPos = MyPos; lastPos.y = 0; return; }
+        if (puck == null || moverp1.Frozen) { Drive = Turn = 0; Action = false; stuckTime = 0; lastPos = MyPos; lastPos.y = 0; return; }
         float now = Time.time;
         if (puckBody == null || puckBody.transform != puck) puckBody = puck.GetComponent<Rigidbody>();
         seen.Enqueue((now, PuckPos));
@@ -165,11 +170,16 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
             lined = false;
         }
 
+        // Claw: carrying the puck -> drive at the goal (the tool code below shoots when aimed).
+        if (tools == null) tools = GetComponent<RobotTools>();
+        bool carry = tools != null && tools.Holding;
+        if (carry) { target = aim; lined = true; defend = false; }
+
         // Never loiter in our own net: drive back out in front of it.
         bool inNet = Vector3.Dot(me - og, outward) > -40f;
         if (inNet) { target = og - outward * 260f; lined = false; }
 
-        Mode = inNet ? "exit" : role == Role.Support && puckDist > 300f ? "support" : defend ? "defend" : !room ? (ramHome ? "goal-side" : "ram") : lined ? "charge" : wrongSide ? "around" : "behind";
+        Mode = inNet ? "exit" : carry ? "carry" : role == Role.Support && puckDist > 300f ? "support" : defend ? "defend" : !room ? (ramHome ? "goal-side" : "ram") : lined ? "charge" : wrongSide ? "around" : "behind";
 
         target = AvoidObstacles(me, target);
 
@@ -192,6 +202,20 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         stuckTime = (drive > 0.4f && moved < 60f) ? stuckTime + Time.fixedDeltaTime : 0f;
         if (stuckTime > 0.8f) { reverseUntil = now + 0.5f; stuckTime = 0; }
         if (now < reverseUntil) { drive = -1f; turn = 0.6f; }
+
+        // Tool use.
+        Vector3 agp = attackGoal; agp.y = 0;
+        bool aimed = Vector3.Angle(fwd, aim - me) < 12f;
+        float toGoal = Vector3.Distance(me, agp);
+        bool act = false;
+        if (tools != null && now >= reverseUntil)
+            switch (tools.Tool)
+            {
+                case RobotTool.Kicker: act = aimed && toGoal < 1300f * Rink.Scale.x && tools.InPocket(PuckPos, 1.25f); break;
+                case RobotTool.Claw: act = tools.Holding && aimed && toGoal < 850f * Rink.Scale.x; break;
+                case RobotTool.Booster: act = (Mode == "charge" || Mode == "defend" || Mode == "behind" || Mode == "carry") && Mathf.Abs(angle) < 8f && to.magnitude > 450f; break;
+            }
+        Action = act;
 
         Drive = drive * (sprint && role != Role.Defend ? Mathf.Max(speedFraction, 0.9f) : speedFraction);
         Turn = turn;

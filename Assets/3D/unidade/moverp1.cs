@@ -23,6 +23,12 @@ public class moverp1 : MonoBehaviour
     // 1 = normal grip; lower = the robot skids (the ice arena).
     public static float Grip = 1f;
 
+    // Per-robot stats (RobotLoadout sets them from the chosen RobotSpec; 1 = standard chassis).
+    [System.NonSerialized] public float speedMul = 1f, accelMul = 1f, turnMul = 1f, gripMul = 1f, sideGripMul = 1f, stunGrip = 0.2f;
+    [System.NonSerialized] public float boostUntil;     // Booster tool
+    public bool Boosting => Time.time < boostUntil;
+    public bool Action { get; private set; }            // tool key this step
+
     // The handling setting is in degrees per 50 Hz step (the old menu's unit); scale by the
     // real step so turning speed doesn't depend on the physics rate.
     const float RefStep = 0.02f;
@@ -48,12 +54,14 @@ public class moverp1 : MonoBehaviour
 
     void FixedUpdate()
     {
-        rot = mostradado.rotaao;
-        vel = mostradado.speed;
+        bool boost = Boosting;
+        rot = mostradado.rotaao * turnMul;
+        vel = mostradado.speed * speedMul * (boost ? 1.5f : 1f);
         float drive, turn;
-        if (Frozen) { drive = 0; turn = 0; }
-        else if (input != null) { drive = input.Drive; turn = input.Turn; }
-        else { drive = Input.GetAxis(horizontal); turn = Input.GetAxis(vertical); }
+        if (Frozen) { drive = 0; turn = 0; Action = false; }
+        else if (input != null) { drive = input.Drive; turn = input.Turn; Action = input.Action; }
+        else { drive = Input.GetAxis(horizontal); turn = Input.GetAxis(vertical); Action = false; }
+        if (boost) drive = 1f;   // a boost is a straight charge
         Horizontal = drive; Vertical = turn;
 
         float dt = Time.fixedDeltaTime;
@@ -61,8 +69,8 @@ public class moverp1 : MonoBehaviour
         // Turn through the Rigidbody (not transform.Rotate) so interpolation and collisions see it.
         b.MoveRotation(b.rotation * Quaternion.Euler(0, 0, (turn * rot + spin) * dt / RefStep));
 
-        float grip = Mathf.Lerp(0.35f, 1f, Grip);   // ice keeps a third of the grip
-        if (Time.time < hitUntil) grip *= 0.2f;
+        float grip = Mathf.Min(Mathf.Lerp(0.35f, 1f, Grip) * gripMul, 1.2f);   // ice keeps a third of the grip
+        if (Time.time < hitUntil) grip *= stunGrip;
         Vector3 fwd = b.rotation * Vector3.down; fwd.y = 0; fwd.Normalize();   // nose = -up of the model
         Vector3 side = Vector3.Cross(Vector3.up, fwd);
         Vector3 v = b.linearVelocity;
@@ -70,10 +78,10 @@ public class moverp1 : MonoBehaviour
 
         float wanted = drive * vel;
         bool pushing = Mathf.Abs(drive) > 0.05f && (Mathf.Sign(wanted) == Mathf.Sign(vf) || Mathf.Abs(vf) < 1f);
-        float accel = (pushing ? DriveAccel : CoastDecel) * vel * grip;
+        float accel = (pushing ? DriveAccel * accelMul * (boost ? 2f : 1f) : CoastDecel) * vel * grip;
         if (Frozen) accel = 20f * vel;   // countdown / kickoff: stand still
         vf = Mathf.MoveTowards(vf, wanted, accel * dt);
-        vs = Mathf.MoveTowards(vs, 0f, SideGrip * vel * grip * (Frozen ? 8f : 1f) * dt);
+        vs = Mathf.MoveTowards(vs, 0f, SideGrip * sideGripMul * vel * grip * (Frozen ? 8f : 1f) * dt);
 
         b.linearVelocity = fwd * vf + side * vs + Vector3.up * v.y;
     }

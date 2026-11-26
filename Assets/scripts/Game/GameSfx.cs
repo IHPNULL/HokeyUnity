@@ -8,6 +8,7 @@ public static class GameSfx
 
     public static void Init(GameObject host)
     {
+        GameSfxHook.Kick = Kick;
         if (!host.TryGetComponent(out src)) src = host.AddComponent<AudioSource>();
         src.playOnAwake = false; src.spatialBlend = 0f;
         if (horn != null) return;
@@ -17,6 +18,7 @@ public static class GameSfx
         go = Make("go", 0.45f, (t, ph) => Mathf.Sin(ph[0] * 6.2832f) * 0.7f + Mathf.Sin(ph[1] * 6.2832f) * 0.3f, new[] { 1320f, 1760f }, 0.005f, 0.2f);
     }
 
+    public static void Kick() => Play(beep, 0.3f);
     public static void Horn() => Play(horn, 0.9f);
     public static void Buzzer() => Play(buzzer, 0.7f);
     public static void Beep() => Play(beep, 0.6f);

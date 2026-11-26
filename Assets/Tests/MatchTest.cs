@@ -153,11 +153,11 @@ public class MatchTest
         {
             t += Time.deltaTime;
             var p = red.transform.position;
-            if ((int)(t * 2) != (int)((t - Time.deltaTime) * 2) && t < 30)
+            if ((int)(t * 2) != (int)((t - Time.deltaTime) * 2) && t < 40)
             {
                 var ai = red.GetComponent(T("AIRobotInput"));
                 var tg = (Vector3)ai.GetType().GetProperty("Target").GetValue(ai); var f = -red.transform.up; var rv = red.GetComponent<Rigidbody>().linearVelocity;
-                trace.Append($" [{t:F1}s r({p.x:F0},{p.z:F0}) f({f.x:F1},{f.z:F1}) v({rv.x:F0},{rv.z:F0}) tg({tg.x:F0},{tg.z:F0}) d={ai.GetType().GetProperty("Drive").GetValue(ai):F2} p({prb.position.x:F0},{prb.position.z:F0}) {ai.GetType().GetProperty("Mode").GetValue(ai)}]");
+                trace.Append($" [{t:F1}s r({p.x:F0},{p.z:F0}) f({f.x:F1},{f.z:F1}) v({rv.x:F0},{rv.z:F0}) tg({tg.x:F0},{tg.z:F0}) d={ai.GetType().GetProperty("Drive").GetValue(ai):F2} p({prb.position.x:F0},{prb.position.z:F0}) {ai.GetType().GetProperty("Mode").GetValue(ai)}{(red.GetComponent(T("RobotTools")) is Component rt && (bool)rt.GetType().GetProperty("Holding").GetValue(rt) ? " H" : "")}]");
             }
             minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.z); maxZ = Mathf.Max(maxZ, p.z);
             yield return null;
@@ -165,7 +165,7 @@ public class MatchTest
         Time.timeScale = 1f;
         Debug.Log($"AI {diff} {spot} arena{arena}: scored={Score("marcadorverm", "pontosverm")} after {t:F1}s, x {minX:F0}..{maxX:F0} z {minZ:F0}..{maxZ:F0}, blue goals {Score("marcadorazul", "pontosazul")}" + (Score("marcadorverm", "pontosverm") == 0 || Score("marcadorazul", "pontosazul") > 0 ? trace.ToString() : ""));
         // A puck rebounding off the far post or boards can occasionally beat the AI back to its own net.
-        Assert.LessOrEqual(Score("marcadorazul", "pontosazul"), 1, "AI own goals");
+        Assert.LessOrEqual(Score("marcadorazul", "pontosazul"), 1, "AI own goals");   // a missed shot can rebound the length of the rink once in a while (the test player is idle)
         Assert.Greater(Score("marcadorverm", "pontosverm"), 0, "AI did not score within 90 s");
         Assert.Greater(minX, -450f); Assert.Less(maxX, 1880f);   // may skid into its own net mouth on ice (then the exit rule drives it out) Assert.Greater(minZ, -180f); Assert.Less(maxZ, 980f);
         Call("QuitToMenu");

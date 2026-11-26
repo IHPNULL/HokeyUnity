@@ -103,7 +103,18 @@ public class MatchManager : MonoBehaviour
         for (int i = 0; i < floods.Length; i++) { var f = floodPos[i]; floods[i].transform.position = Rink.W(f.x, f.z, f.y); }
         for (int t = 0; t < 2; t++)
             for (int i = 1; i < 3; i++) teams[t][i].SetActive(big);
+        ApplyLoadouts();
         ResetRobots(); ResetPuck();
+    }
+
+    // Robot picks (GameConfig.blueRobots / redRobots) -> stats, size and tool on each robot.
+    public void ApplyLoadouts()
+    {
+        for (int t = 0; t < 2; t++)
+        {
+            var ids = GameConfig.Robots(t == 1);
+            for (int i = 0; i < 3; i++) RobotLoadout.Apply(teams[t][i], RobotCatalog.Get(ids[i]));
+        }
     }
 
     static GameObject Find(string n)
@@ -175,9 +186,12 @@ public class MatchManager : MonoBehaviour
 
     KeyboardRobotInput Keys(int t)
     {
-        if (GameConfig.players == GameConfig.Players.One) return new KeyboardRobotInput(new[] { "Horizontal", "Horizontal2" }, new[] { "Vertical", "Vertical2" });
+        if (GameConfig.players == GameConfig.Players.One)
+            return new KeyboardRobotInput(new[] { "Horizontal", "Horizontal2" }, new[] { "Vertical", "Vertical2" }, new[] { KeyCode.Space, KeyCode.Return, KeyCode.KeypadEnter });
         var m = teams[t][0].GetComponent<moverp1>();
-        return new KeyboardRobotInput(new[] { m.horizontal }, new[] { m.vertical });
+        // Tool key: blue Space, red Enter (Mac keyboards have no right Ctrl).
+        var keys = t == 1 ? new[] { KeyCode.Space } : new[] { KeyCode.Return, KeyCode.KeypadEnter, KeyCode.RightControl };
+        return new KeyboardRobotInput(new[] { m.horizontal }, new[] { m.vertical }, keys);
     }
 
     // Team t's player takes robot h (-1 = none); every other active robot of the team is AI.
