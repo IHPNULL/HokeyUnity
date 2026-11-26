@@ -1,5 +1,45 @@
 # Changelog
 
+## v1.4.0: neon arena, new robots, 2x2
+
+### Modes
+- **New 2x2 mode**: two robots a side, with a 20 kg team weight limit (3x3 keeps 30 kg).
+- **Every match plays on the big rink.** The small rink is gone; 1x1, 2x2 and 3x3 all use the
+  same arena.
+
+### Robots
+- **All five robots rebuilt** in a neon esports style from clean faceted parts, about
+  1,800 to 2,500 triangles each:
+  - Ômega: hydraulic claw pistons, mandible tips, sensor crown
+  - Faísca: low cockpit, glowing fin, rear wing, booster nozzles
+  - Trator: armored skirts with hazard stripes, roll cage with beacons, V-blade
+  - Canhão: hex turret and a big glowing cannon
+  - Ímã: copper coils, reactor core, magnet pads that pulse in Ímã's own green
+- Spoked wheels with tread blocks and LED rings, team paint, neon strips, headlights and
+  brake lights on every robot.
+- **New hitboxes** that match the new bodies. The puck pocket is now truly open (the old
+  hitbox had an invisible wall across it), so the claw and kicker catch the puck where you
+  see it. Pillars and boards can no longer wedge into the pocket.
+
+### Animation
+- **No more jelly.** The body lean reads speed from the physics engine and uses a firm,
+  damped suspension, so robots don't wobble when they accelerate. Hard stops and crashes
+  give one clean nose dive (a head-on crash used to tip the nose up).
+
+### Arena
+- **Neon LED scoreboard**: live score, period clock, current period and periods won, built
+  as LED digits on both faces. The scoring team's half of the frame flashes after a goal.
+  It hangs from the roof above the far boards.
+- **Darker stadium** so the neon stands out, with team LED strips along the boards (blue
+  half and red half), ad panels with LED lettering, light trusses and hanging team banners.
+- **Puck** with a thin glowing rim so it's easier to follow.
+- **Goals** with neon frames in team colors.
+- Each arena has its own accent: Clássica cool white, Gelo cyan, Fábrica amber.
+
+### Tests
+- New: 2x2 match, live scoreboard.
+- Updated for the big rink and the open pocket. 59 of 59 pass.
+
 ## Unreleased: Phase 0 (foundation)
 
 - Docs: `README.md`, `docs/architecture.md`, `docs/licenses.md` (asset license audit),
