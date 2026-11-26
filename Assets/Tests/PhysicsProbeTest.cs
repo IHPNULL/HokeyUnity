@@ -43,9 +43,19 @@ public class PhysicsProbeTest
         yield return Setup();
         blue.SetActive(false);
         var c = red.transform.position;
+        var cols = red.transform.Find("Loadout").GetComponentsInChildren<Collider>();
+        var hull = cols.First(k => k.name == "Hull Collider").bounds;
+        var arm = cols.Where(k => k.name == "Arm Collider" && k.bounds.center.z > c.z).OrderBy(k => k.bounds.min.x).First().bounds;
+
+        // Into the open pocket: the puck is caught by the back wall, never passes through the hull.
         yield return Shoot(c + new Vector3(-350, 0, 0), new Vector3(1000, 0, 0), 0.8f);
-        Debug.Log($"PROBE robot: puck x={prb.position.x:F0} robot x={c.x:F0} vx={prb.linearVelocity.x:F0}");
-        Assert.Less(prb.position.x, c.x - 40f, "puck went into/through the robot hull");
+        Debug.Log($"PROBE robot pocket: puck x={prb.position.x:F0} robot x={c.x:F0} hull back x={hull.max.x:F0} vx={prb.linearVelocity.x:F0}");
+        Assert.Less(prb.position.x, hull.max.x, "puck went through the robot hull");
+
+        // Straight at an arm tip: the solid hull bounces it back.
+        yield return Shoot(new Vector3(c.x - 350, 0, arm.center.z), new Vector3(1000, 0, 0), 0.8f);
+        Debug.Log($"PROBE robot arm: puck x={prb.position.x:F0} arm front x={arm.min.x:F0} vx={prb.linearVelocity.x:F0}");
+        Assert.Less(prb.position.x, arm.min.x, "puck went into/through the robot's arm");
     }
 
     [UnityTest]
@@ -83,6 +93,6 @@ public class PhysicsProbeTest
         rb.position = new Vector3(634, rb.position.y, 400);
         for (int i = 0; i < 90; i++) { rb.linearVelocity = new Vector3(0, 0, -2500); yield return new WaitForFixedUpdate(); }
         Debug.Log($"PROBE robot->boards: z={rb.position.z:F0}");
-        Assert.Greater(rb.position.z, -200f, "robot drove through the boards");
+        Assert.Greater(rb.position.z, W(0, -180).z, "robot drove through the boards");   // side boards at W(0,-110); a robot half-width beyond is still inside
     }
 }

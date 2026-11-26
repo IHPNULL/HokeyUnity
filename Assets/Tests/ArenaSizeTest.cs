@@ -32,11 +32,10 @@ public class ArenaSizeTest
     }
 
     [UnityTest]
-    public IEnumerator RinkGrowsGoalsKeepTheirSize([Values("OneVsOne", "ThreeVsThree")] string format)
+    public IEnumerator RinkGrowsGoalsKeepTheirSize([Values("OneVsOne", "TwoVsTwo", "ThreeVsThree")] string format)
     {
         yield return Load(format);
-        bool big = format == "ThreeVsThree";
-        Assert.Greater(Scale.x, big ? 1.5f : 1.2f, "rink is stretched");
+        Assert.Greater(Scale.x, 1.5f, "every format plays on the big rink");
         foreach (var n in new[] { "gol Visual", "gol (1) Visual" })
         {
             var vis = Find(n).transform;
@@ -67,7 +66,7 @@ public class ArenaSizeTest
         // Rounded boards generated for this size; the old stretched boards are retired.
         float radius = (float)T("RinkBuilder").GetProperty("CornerRadius").GetValue(null);
         Debug.Log($"PROBE arena {format}: corner radius {radius:F0}");
-        Assert.Greater(radius, big ? 420f : 300f, "round corners");
+        Assert.Greater(radius, 420f, "round corners");
         Assert.IsTrue(Find("Glass").GetComponent<MeshCollider>().enabled, "rounded boards are solid");
         Assert.IsFalse(Find("policarbonato").GetComponent<Collider>().enabled, "old boards retired");
 
@@ -86,7 +85,7 @@ public class ArenaSizeTest
         // Goals count from both ends, and a puck sliding along the end boards beside a goal stays in.
         var prb = Find("PUCK").GetComponent<Rigidbody>();
         int outBefore = (int)T("puck").GetField("OutOfPlayCount").GetValue(null);
-        prb.position = W(1300, 400 + (big ? 300 : 250), prb.position.y); prb.linearVelocity = Vector3.zero;
+        prb.position = W(1300, 400 + 300, prb.position.y); prb.linearVelocity = Vector3.zero;
         yield return new WaitForFixedUpdate();
         prb.linearVelocity = new Vector3(1300, 0, 0);
         yield return new WaitForSeconds(1.2f);

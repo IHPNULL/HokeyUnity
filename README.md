@@ -1,6 +1,6 @@
 # HOCKEY (working title)
 
-A robot hockey game made in Unity: small robots push a puck around a rink. You can play 1x1 or 3x3,
+A robot hockey game made in Unity: small robots push a puck around a rink. You can play 1x1, 2x2 or 3x3 (all on the big rink),
 on your own against the AI, with two players on one keyboard (split screen), or online with two
 players by IP address. Five robots each have their own stats and one tool. There are three arenas
 and a tournament mode. The in-game text is in Brazilian Portuguese.
@@ -24,7 +24,7 @@ Roadmap to a commercial release: [docs/roadmap.md](docs/roadmap.md).
 |---|---|---|
 | Drive / turn | WASD | Arrow keys |
 | Tool (kick, boost, release claw) | Space | Enter / Right Ctrl |
-| Switch robot (3x3) | Tab / Left Shift | Right Shift |
+| Switch robot (2x2, 3x3) | Tab / Left Shift | Right Shift |
 | Pause | Esc / P | Esc / P |
 
 In 1 Player mode, WASD and the arrow keys both drive the blue robot, and Space or Enter uses its tool.

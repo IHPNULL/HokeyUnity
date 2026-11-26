@@ -1,13 +1,13 @@
 using UnityEngine;
 
-// Rink geometry. The scene's rink is stretched about its center (1x1 a bit, 3x3 more), so every
+// Rink geometry. The scene's rink is stretched about its center to the big rink (every format plays
+// on it), so every
 // gameplay position is written in the scene's original coordinates and mapped with W().
 // Goals, pillars and round markings keep their real size (KeepSize).
 public static class Rink
 {
     public static readonly Vector3 Center = new Vector3(634f, 0f, 400f);
-    public static readonly Vector2 NormalScale = new Vector2(1.25f, 1.2f);   // 1x1 rink, length x width
-    public static readonly Vector2 BigScale = new Vector2(1.6f, 1.45f);      // 3x3 rink (fits inside the stands)
+    public static readonly Vector2 BigScale = new Vector2(1.6f, 1.45f);      // the rink, length x width (fits inside the stands)
     public static Vector2 Scale = Vector2.one;
 
     public static Vector3 W(float x, float z, float y = 0f) =>

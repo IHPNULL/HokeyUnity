@@ -64,6 +64,7 @@ public static class RinkBuilder
         kickMF.sharedMesh = Wall(pieces, 0f, 12f, -2.5f, Thickness + 5f, 1f);
         wallCol.sharedMesh = null; wallCol.sharedMesh = glassMF.sharedMesh;
         floorMF.sharedMesh = FloorMesh();
+        ArenaDressing.Rebuild(pieces, root.parent);   // neon strip, ad panels, trusses, goal and puck trim
     }
 
     // Long straight runs split into short pieces: PhysX dislikes very long collider triangles.

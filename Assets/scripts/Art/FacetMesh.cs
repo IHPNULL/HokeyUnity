@@ -28,13 +28,76 @@ public class FacetMesh
         for (int i = 1; i < p.Length - 1; i++) { t.Add(i0); t.Add(i0 + i); t.Add(i0 + i + 1); }
     }
 
+    // Optional: pick each face's submesh from its outward normal (e.g. paint the upward faces).
+    // Set it while adding geometry, then clear it with PaintBy(null).
+    System.Func<Vector3, int> paintBy;
+    public FacetMesh PaintBy(System.Func<Vector3, int> f) { paintBy = f; return this; }
+
+    // Newell normal: robust for slightly non-planar or partly degenerate polygons.
+    static Vector3 Normal(Vector3[] p)
+    {
+        var nrm = Vector3.zero;
+        for (int i = 0; i < p.Length; i++) { var a = p[i]; var b = p[(i + 1) % p.Length]; nrm += new Vector3((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y)); }
+        return nrm;
+    }
+
     // Convex polygon facing away from `centre`.
     public void Poly(Vector3 centre, params Vector3[] p)
     {
-        var nrm = Vector3.Cross(p[1] - p[0], p[2] - p[0]);
+        var nrm = Normal(p);
+        if (nrm.sqrMagnitude < 1e-14f) return;   // degenerate (zero area)
         var faceC = Vector3.zero; foreach (var q in p) faceC += q; faceC /= p.Length;
         if (Vector3.Dot(nrm, faceC - centre) < 0) { System.Array.Reverse(p); nrm = -nrm; }
-        Emit(nrm.normalized, p);
+        if (paintBy != null) { var keep = t; Sub(paintBy(nrm.normalized)); Emit(nrm.normalized, p); t = keep; }
+        else Emit(nrm.normalized, p);
+    }
+
+    static Vector3 Centroid(Vector3[] r) { var c = Vector3.zero; foreach (var q in r) c += q; return c / r.Length; }
+
+    // Solid through a sequence of convex rings (same vertex count, same order), capped at both ends.
+    // Each side face points away from the axis between its two rings, so tapered and bent lofts work.
+    public void Loft(params Vector3[][] rings)
+    {
+        int n = rings[0].Length;
+        for (int i = 0; i < rings.Length - 1; i++)
+        {
+            var c = (Centroid(rings[i]) + Centroid(rings[i + 1])) / 2;
+            for (int k = 0; k < n; k++)
+            {
+                int j = (k + 1) % n;
+                var quad = new List<Vector3>(4);
+                foreach (var q in new[] { rings[i][k], rings[i][j], rings[i + 1][j], rings[i + 1][k] })
+                    if (quad.Count == 0 || (quad[^1] - q).sqrMagnitude > 1e-12f) quad.Add(q);
+                if (quad.Count > 1 && (quad[0] - quad[^1]).sqrMagnitude < 1e-12f) quad.RemoveAt(quad.Count - 1);
+                if (quad.Count >= 3) Poly(c, quad.ToArray());
+            }
+        }
+        Poly(Centroid(rings[1]), (Vector3[])rings[0].Clone());
+        Poly(Centroid(rings[^2]), (Vector3[])rings[^1].Clone());
+    }
+
+    // Box with every edge chamfered by `ch`, rotated by `rot` around its centre.
+    public void CBox(Vector3 c, Vector3 size, float ch, Quaternion rot)
+    {
+        float hx = size.x / 2, hy = size.y / 2, hz = size.z / 2;
+        ch = Mathf.Min(ch, hx * 0.9f, hy * 0.9f, hz * 0.9f);
+        Vector3[] Oct(float x, float iy, float iz, float cut)
+        {
+            float y = hy - iy, z = hz - iz;
+            var r = new[] { new Vector3(x, -y + cut, -z), new Vector3(x, y - cut, -z), new Vector3(x, y, -z + cut), new Vector3(x, y, z - cut),
+                            new Vector3(x, y - cut, z), new Vector3(x, -y + cut, z), new Vector3(x, -y, z - cut), new Vector3(x, -y, -z + cut) };
+            for (int i = 0; i < r.Length; i++) r[i] = c + rot * r[i];
+            return r;
+        }
+        Loft(Oct(-hx, ch, ch, ch * 0.5f), Oct(-hx + ch, 0, 0, ch), Oct(hx - ch, 0, 0, ch), Oct(hx, ch, ch, ch * 0.5f));
+    }
+    public void CBox(Vector3 c, Vector3 size, float ch) => CBox(c, size, ch, Quaternion.identity);
+
+    // Faceted cylinder from a to b.
+    public void Tube(Vector3 a, Vector3 b, float r, int seg, float startDeg = 0)
+    {
+        float len = (b - a).magnitude;
+        Lathe(a, b - a, new[] { new Vector2(0, 0), new Vector2(r, 0), new Vector2(r, len), new Vector2(0, len) }, seg, startDeg);
     }
 
     // Convex polygon facing along `normal` (decals, display segments).
@@ -84,10 +147,14 @@ public class FacetMesh
     }
 
     // Surface of revolution around +Y; profile = (radius, height), a radius of 0 closes that end.
-    public void Lathe(Vector3 o, Vector2[] prof, int seg, float startDeg)
+    public void Lathe(Vector3 o, Vector2[] prof, int seg, float startDeg) => Lathe(o, Vector3.up, prof, seg, startDeg);
+
+    // Surface of revolution around `axis` through `o`; profile = (radius, distance along the axis).
+    public void Lathe(Vector3 o, Vector3 axis, Vector2[] prof, int seg, float startDeg = 0)
     {
-        var centre = o + Vector3.up * (prof[0].y + prof[^1].y) / 2;
-        Vector3 P(Vector2 pr, int k) { float a = (startDeg + 360f * k / seg) * Mathf.Deg2Rad; return o + new Vector3(Mathf.Cos(a) * pr.x, pr.y, Mathf.Sin(a) * pr.x); }
+        var q = Quaternion.FromToRotation(Vector3.up, axis.normalized);
+        var centre = o + q * Vector3.up * (prof[0].y + prof[^1].y) / 2;
+        Vector3 P(Vector2 pr, int k) { float a = (startDeg + 360f * k / seg) * Mathf.Deg2Rad; return o + q * new Vector3(Mathf.Cos(a) * pr.x, pr.y, Mathf.Sin(a) * pr.x); }
         for (int i = 0; i < prof.Length - 1; i++)
             for (int k = 0; k < seg; k++)
             {

@@ -57,6 +57,7 @@ public static partial class ArenaTheme
             if (grade) grade.colorFilter.value = new Color(1f, 0.94f, 0.86f);
             pillars.SetActive(true);
         }
+        ArenaDressing.ApplyTheme(Current, key, floods);   // neon accents + darker bowl
     }
 
     static GameObject FindPath(string path)

@@ -8,6 +8,9 @@ using UnityEngine;
 public class ScoreboardDisplay : MonoBehaviour
 {
     public float flashSeconds = 3f;
+    public const float HangHeight = 470f, HangOutside = 120f, CeilingY = 1240f;   // hung above the far boards
+
+    bool hung; Transform cables;
 
     Transform board;
     Mesh display;
@@ -95,6 +98,44 @@ public class ScoreboardDisplay : MonoBehaviour
         };
         lastBlue = marcadorazul.pontosazul; lastRed = marcadorverm.pontosverm;
         Refresh(true);
+        if (hung) BuildCables();
+    }
+
+    // Moves the board so its screen centre sits at `center` and hangs it from the roof on two cables
+    // (the floor pole is hidden). Works before or after Awake.
+    public void HangAt(Vector3 center)
+    {
+        var src = transform.Find("Box001");
+        var mf = src ? src.GetComponent<MeshFilter>() : null;
+        if (mf == null || mf.sharedMesh == null) return;
+        var now = src.TransformPoint(mf.sharedMesh.bounds.center);
+        transform.position += center - now;
+        hung = true;
+        foreach (var n in new[] { "Cylinder001", "Cylinder002", "Sphere001", "Sphere002" })
+        { var t = transform.Find(n); if (t && t.TryGetComponent(out Renderer r)) r.enabled = false; }
+        if (board) BuildCables();
+    }
+
+    void BuildCables()
+    {
+        if (cables) Destroy(cables.gameObject);
+        float top = screen.y / 2 + 12f;                        // housing top, board-local
+        float len = CeilingY - (board.position.y + top);
+        if (len <= 0) return;
+        var m = new FacetMesh();
+        foreach (int s in new[] { -1, 1 })
+        {
+            float x = s * screen.x * 0.36f;
+            m.Sub(0).Seg(new Vector3(x, top, 0), new Vector3(x, top + len, 0), new Vector2(2.2f, 2.2f), new Vector2(2.2f, 2.2f));       // steel cable
+            m.Sub(0).Box(new Vector3(x, top + 5f, 0), new Vector3(16f, 10f, 16f));                                                    // clamp
+        }
+        var go = new GameObject("Cables", typeof(MeshFilter), typeof(MeshRenderer));
+        go.transform.SetParent(board, false);
+        go.GetComponent<MeshFilter>().sharedMesh = m.ToMesh("Scoreboard Cables");
+        var r = go.GetComponent<MeshRenderer>();
+        r.sharedMaterial = transform.Find("Jumbotron/Housing").GetComponent<MeshRenderer>().sharedMaterials[0];
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        cables = go.transform;
     }
 
     void Update()

@@ -20,12 +20,40 @@ public class RobotFx : MonoBehaviour
 
     Vector3 lastPos, lastVel; float lastFwd; bool hasLast; float sprayAt;
     float pitch, roll, pitchVel, rollVel;
-    const float MaxLean = 9f, MaxHit = 14f, Spring = 140f, Damping = 13f;
+    // Firm suspension: stiff, close to critically damped (zeta ~0.84: 37 / (2*sqrt(480))), so the body settles instead of
+    // wobbling like jelly. Acceleration comes from the physics velocity on fixed steps (render-frame
+    // position deltas spike whenever a frame has no physics step), low-passed over AccTau seconds.
+    const float MaxLean = 6f, MaxHit = 12f, Spring = 480f, Damping = 37f, LeanPerAcc = 0.0013f, AccTau = 0.035f, VelTau = 0.09f, JoltDv = 200f;
+    Rigidbody rb;
+    Vector3 physVel, accSmooth, smoothVel; bool hasPhys;
     MaterialPropertyBlock mpb;
 
     public void Reset(float size)
     {
         hasLast = false; wheelRadius = 17f * size; pitch = roll = pitchVel = rollVel = 0f; lastVel = Vector3.zero;
+        hasPhys = false; accSmooth = smoothVel = Vector3.zero;
+    }
+
+    bool Simulated => (rb || TryGetComponent(out rb)) && !rb.isKinematic;
+
+    void FixedUpdate()
+    {
+        if (!Simulated) { hasPhys = false; return; }
+        var v = rb.linearVelocity; v.y = 0;
+        if (hasPhys)
+        {
+            var dv = v - physVel;
+            var a = dv / Time.fixedDeltaTime;
+            accSmooth = Vector3.Lerp(accSmooth, a, 1f - Mathf.Exp(-Time.fixedDeltaTime / AccTau));
+            // A jolt (crash, hard stop): a speed change no motor can make in one physics step kicks the body;
+            // the damped spring settles it. Driving changes speed by well under JoltDv per step.
+            Vector3 f = transform.rotation * Vector3.down; f.y = 0; f.Normalize();
+            Vector3 r = transform.rotation * Vector3.right; r.y = 0; r.Normalize();
+            float df = Vector3.Dot(dv, f), dl = Vector3.Dot(dv, r);
+            if (Mathf.Abs(df) > JoltDv) pitchVel += Mathf.Clamp(-df * 0.3f, -240f, 240f);   // stopping dives the nose
+            if (Mathf.Abs(dl) > JoltDv) rollVel += Mathf.Clamp(-dl * 0.3f, -240f, 240f);
+        }
+        physVel = v; hasPhys = true;
     }
 
     void LateUpdate()
@@ -39,19 +67,29 @@ public class RobotFx : MonoBehaviour
         Vector3 side = v - fwd * fs;
 
         // Body lean: squat when accelerating, dive when braking, lean out of turns, rock on hits.
-        Vector3 acc = (v - lastVel) / dt; lastVel = v;
+        // Host: smoothed physics acceleration. Online joiner (kinematic, follows snapshots): smoothed
+        // velocity from the transform, so snapshot steps don't shake the body.
+        Vector3 acc;
+        if (Simulated && hasPhys) acc = accSmooth;
+        else
+        {
+            var sv = Vector3.Lerp(smoothVel, v, 1f - Mathf.Exp(-dt / VelTau));
+            var raw = (sv - smoothVel) / dt; smoothVel = sv;
+            accSmooth = Vector3.Lerp(accSmooth, raw, 1f - Mathf.Exp(-dt / AccTau));
+            acc = accSmooth;
+        }
+        lastVel = v;
         Vector3 right = transform.rotation * Vector3.right; right.y = 0; right.Normalize();
         float af = Vector3.Dot(acc, fwd), al = Vector3.Dot(acc, right);
-        float lim = acc.magnitude > 20000f ? MaxHit : MaxLean;   // a crash rocks it further
-        float pitchTarget = Mathf.Clamp(-af * 0.0012f, -lim, lim);
-        float rollTarget = Mathf.Clamp(-al * 0.0012f, -lim, lim);
-        if (acc.magnitude > 20000f)   // a jolt (crash, hard stop): kick the body, the spring rocks it back
+        float pitchTarget = Mathf.Clamp(-af * LeanPerAcc, -MaxLean, MaxLean);
+        float rollTarget = Mathf.Clamp(-al * LeanPerAcc, -MaxLean, MaxLean);
+        // Semi-implicit spring step, sub-stepped so a slow frame can't make it overshoot.
+        int steps = Mathf.Clamp(Mathf.CeilToInt(dt / 0.008f), 1, 8); float h = dt / steps;
+        for (int i = 0; i < steps; i++)
         {
-            pitchVel += Mathf.Clamp(-af * 0.004f, -260f, 260f);
-            rollVel += Mathf.Clamp(-al * 0.004f, -260f, 260f);
+            pitchVel += (Spring * (pitchTarget - pitch) - Damping * pitchVel) * h; pitch += pitchVel * h;
+            rollVel += (Spring * (rollTarget - roll) - Damping * rollVel) * h; roll += rollVel * h;
         }
-        pitchVel += (Spring * (pitchTarget - pitch) - Damping * pitchVel) * dt; pitch += pitchVel * dt;
-        rollVel += (Spring * (rollTarget - roll) - Damping * rollVel) * dt; roll += rollVel * dt;
         pitch = Mathf.Clamp(pitch, -MaxHit, MaxHit); roll = Mathf.Clamp(roll, -MaxHit, MaxHit);
         if (tilt) tilt.localRotation = Quaternion.Euler(pitch, roll, 0f);
 
@@ -72,9 +110,15 @@ public class RobotFx : MonoBehaviour
         if (magnets.Count > 0)
         {
             mpb ??= new MaterialPropertyBlock();
-            float k = 1.2f + Mathf.Sin(Time.time * 5f) * 0.9f;
-            mpb.SetColor("_EmissionColor", new Color(0.4f, 0.8f, 2.5f) * k);
-            foreach (var r in magnets) if (r) r.SetPropertyBlock(mpb);
+            float k = 0.6f + Mathf.Sin(Time.time * 5f) * 0.45f + 0.45f;   // 0.6 .. 1.5 x the pad's own glow
+            foreach (var r in magnets)
+            {
+                if (!r) continue;
+                var m = r.sharedMaterial;
+                var baseGlow = m && m.HasProperty("_EmissionColor") ? m.GetColor("_EmissionColor") : new Color(0.4f, 0.8f, 2.5f);
+                mpb.SetColor("_EmissionColor", baseGlow * k);
+                r.SetPropertyBlock(mpb);
+            }
         }
 
         // Booster flames (the flame meshes are switched by RobotTools or by the host's snapshot).

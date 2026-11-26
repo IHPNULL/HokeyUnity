@@ -13,7 +13,7 @@ The build has one scene, `Assets/Scenes/MENU.unity`. It holds:
 - **`Game`**: the root object holding `MatchManager` and `GameUI`, plus the orbiting `Menu Camera`.
 - **`Audio Source`**: the music player. `MatchManager` finds it by name.
 
-Menus, the HUD, the extra 3x3 robots, the rink's rounded boards and floor, the robot body kits, the
+Menus, the HUD, the extra 2x2/3x3 robots, the rink's rounded boards and floor, the robot body kits, the
 particle effects and every sound effect are built in code when the scene starts. The one-shot editor
 scripts in `Assets/Editor` set the scene up once: `GameSetup`, `UrpLookSetup`, `GoalBuilder`,
 `ColliderFix` and `UrpMigration`.
@@ -24,7 +24,7 @@ MENU.unity
 │        └─ GameUI (menus + HUD, uGUI built in code)
 ├── JOGANDO (arena; also the menu backdrop)
 │   ├── arena ── Plane (floor collider), policarbonato (old boards, hidden), gol / gol (1) (goal triggers)
-│   ├── unidadeverm / Unidadeazul ── moverp1, RobotTools, Camera   (+ 2 clones each for 3x3)
+│   ├── unidadeverm / Unidadeazul ── moverp1, RobotTools, Camera   (+ 2 clones each for 2x2/3x3)
 │   ├── PUCK ── puck.cs (scores goals)
 │   └── Lighting, cenario externo/placar, stands (CrowdSpawner)
 └── Audio Source (music)
@@ -50,12 +50,13 @@ Menu → Countdown → Playing ⇄ GoalPause
 - `moverp1.Frozen` holds every robot still during menus, countdowns and goal pauses.
 - UI hooks: the `StateChanged` and `Banner` events. Banners are also sent to the online peer.
 
-`GameConfig` (static) holds every menu choice: players, quick match or tournament, 1x1 or 3x3,
+`GameConfig` (static) holds every menu choice: players, quick match or tournament, 1x1, 2x2 or 3x3,
 difficulty, arena, period length, goals per period, volume, robot picks and the tournament `Ladder`.
 
 ## Rink geometry: `Rink` and `RinkBuilder`
 
-The scene's rink is stretched around its center: ×1.25/1.2 for 1x1 and ×1.6/1.45 for 3x3.
+The scene's rink is stretched around its center to ×1.6/1.45 (`Rink.BigScale`). Every format plays on
+this big rink. The scoreboard hangs from the roof above the far boards (`ScoreboardDisplay.HangAt`).
 Gameplay code writes positions in the scene's original coordinates and maps them with
 `Rink.W(x, z)`. Goals, pillars and round markings keep their real size through
 `Rink.KeepSize` / `ApplyKeeps`. `RinkBuilder` generates rounded boards and the floor for the
@@ -66,7 +67,7 @@ current size. `MatchManager.ApplyFormat` re-runs all of this whenever the format
 | Piece | File | Role |
 |---|---|---|
 | Data | `Robots/RobotSpec.cs`, `Resources/Robots/*.asset` | id, name, stats (speed, weight, size, strength), tool, body kit, accent color, optional model |
-| Catalog | `RobotCatalog` (in `RobotSpec.cs`) | Loads every spec from `Resources/Robots`, sorted by `order`. 3x3 team weight budget (30) |
+| Catalog | `RobotCatalog` (in `RobotSpec.cs`) | Loads every spec from `Resources/Robots`, sorted by `order`. Team weight budget: 30 kg for 3x3, 20 kg for 2x2 (`BudgetFor`) |
 | Apply | `Robots/RobotLoadout.cs` | Takes a spec and sets the robot's mass, scale, motor multipliers, team paint, body kit, number and lights |
 | Tools | `Robots/RobotTools.cs` | Claw (cradle + shoot), Booster, Plow, Kicker, Magnets. Cooldowns |
 | Movement | `3D/unidade/moverp1.cs` | Tank drive with momentum, grip, impact spin and stun. Reads an `IRobotInput` |
@@ -78,7 +79,7 @@ No code is needed.
 
 The AI (`AIRobotInput`) is hand-written steering: it gets behind the puck on the line to the goal,
 then charges. Difficulty sets its top speed, reaction delay and how far it lets the puck drift. In
-3x3, `MatchManager.AssignRoles` makes one robot per team the attacker and the others defenders. The
+2x2 and 3x3, `MatchManager.AssignRoles` makes one robot per team the attacker and the others defenders. The
 human player switches robots with Tab or Shift.
 
 ## Arenas: `ArenaTheme`
@@ -121,7 +122,7 @@ comes from the scene's `Audio Source`.
 | Test | Covers |
 |---|---|
 | `GameplayTest` | Puck stays on the rink, goals score |
-| `MatchTest` | Menu and setup screens, best of 3 with sudden death, 1 Player vs AI, 3x3 robot switching |
+| `MatchTest` | Menu and setup screens, best of 3 with sudden death, 1 Player vs AI, 2x2 and 3x3 robot switching |
 | `RobotsTest` | Catalog covers every tool, loadouts change mass/size/stats, kicker, booster |
 | `ArenaSizeTest` | Bigger rinks keep goals, pillars and markings at real size |
 | `PhysicsProbeTest` | Puck vs robot hull, goal posts, boards; fast robots don't pass through boards |

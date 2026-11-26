@@ -45,6 +45,7 @@ public static class Tools
 public static class RobotCatalog
 {
     public const float TeamWeightBudget = 30f;   // 3x3: total weight of a team's three robots
+    public static float BudgetFor(int robots) => TeamWeightBudget * robots / 3f;   // 2x2: 20 kg
 
     static RobotSpec[] all;
     public static RobotSpec[] All

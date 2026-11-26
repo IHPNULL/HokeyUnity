@@ -101,8 +101,8 @@ public class GameUI : MonoBehaviour
 
         Row(col, "Modo", () => GameConfig.kind == GameConfig.Kind.QuickMatch ? "Partida rápida" : "Torneio",
             d => GameConfig.kind = GameConfig.kind == GameConfig.Kind.QuickMatch ? GameConfig.Kind.Tournament : GameConfig.Kind.QuickMatch, OneP);
-        Row(col, "Formato", () => GameConfig.format == GameConfig.Format.ThreeVsThree ? "3 x 3 (arena grande)" : "1 x 1",
-            d => { GameConfig.format = GameConfig.format == GameConfig.Format.OneVsOne ? GameConfig.Format.ThreeVsThree : GameConfig.Format.OneVsOne; if (MatchManager.Instance) MatchManager.Instance.ApplyFormat(); }, () => true);
+        Row(col, "Formato", () => GameConfig.FormatName,
+            d => { GameConfig.format = (GameConfig.Format)(((int)GameConfig.format + d + 3) % 3); if (MatchManager.Instance) MatchManager.Instance.ApplyFormat(); }, () => true);
         Row(col, "Arena", () => ArenaTheme.Names[GameConfig.arena],
             d => { GameConfig.arena = (GameConfig.arena + d + ArenaTheme.Names.Length) % ArenaTheme.Names.Length; ArenaTheme.Apply(GameConfig.arena); }, () => !Tour());
         Row(col, "Dificuldade", () => GameConfig.Name(GameConfig.difficulty),
@@ -165,9 +165,9 @@ public class GameUI : MonoBehaviour
             var budget = Label(c, "", 24, Dim, TextAnchor.MiddleLeft, FontStyle.Bold); Size(budget, 800, 40);
             dyn.Add((budget, () =>
             {
-                float w = RobotCatalog.TeamWeight(GameConfig.Robots(blue), 3);
-                return GameConfig.WithinBudget(blue) ? $"Peso do time: {w:0} / {RobotCatalog.TeamWeightBudget:0} kg" : $"<color=#ff6b6b>Peso do time: {w:0} / {RobotCatalog.TeamWeightBudget:0} kg: acima do limite</color>";
-            }, () => GameConfig.RobotsPerTeam == 3));
+                int n = GameConfig.RobotsPerTeam; float w = RobotCatalog.TeamWeight(GameConfig.Robots(blue), n), cap = RobotCatalog.BudgetFor(n);
+                return GameConfig.WithinBudget(blue) ? $"Peso do time: {w:0} / {cap:0} kg" : $"<color=#ff6b6b>Peso do time: {w:0} / {cap:0} kg: acima do limite</color>";
+            }, () => GameConfig.RobotsPerTeam >= 2));
         }
 
         robotsHint = Label(col, "", 24, Dim, TextAnchor.MiddleCenter); Size(robotsHint, 1680, 40);
@@ -367,7 +367,7 @@ public class GameUI : MonoBehaviour
         foreach (var sb in slotButtons)
             foreach (var b in sb.buttons) b.interactable = !NetSession.Online || (NetSession.IsHost ? sb.blue : !sb.blue);
         if (NetSession.IsHost && NetSession.Instance) NetSession.Instance.SendConfig();
-        if (robotsHint) robotsHint.text = NetSession.IsClient ? "Arena: " + ArenaTheme.Names[GameConfig.arena] + " · " + (GameConfig.RobotsPerTeam == 3 ? "3 x 3" : "1 x 1") + " · aguardando o anfitrião começar…"
+        if (robotsHint) robotsHint.text = NetSession.IsClient ? "Arena: " + ArenaTheme.Names[GameConfig.arena] + " · " + GameConfig.FormatName + " · aguardando o anfitrião começar…"
             : !ok ? "Um time passou do limite de peso: troque um robô mais pesado."
             : GameConfig.players == GameConfig.Players.One ? "Ferramenta: Espaço ou Enter" : "Ferramenta: AZUL Espaço · VERMELHO Enter";
         bool tour = one && GameConfig.kind == GameConfig.Kind.Tournament;
@@ -378,7 +378,7 @@ public class GameUI : MonoBehaviour
             foreach (var s in GameConfig.Ladder) parts.Add(ArenaTheme.Names[s.arena] + " (" + GameConfig.Name(s.diff) + ")");
             ladderText.text = "3 partidas: " + string.Join("  →  ", parts);
         }
-        bool three = GameConfig.format == GameConfig.Format.ThreeVsThree;
+        bool three = GameConfig.RobotsPerTeam > 1;   // a team with teammates: switch keys
         setupHint.text = one ? "Você é o AZUL · dirija com W A S D ou as setas" + (three ? " · Tab troca de robô" : "")
                              : three ? "AZUL: W A S D, troca com Tab  ·  VERMELHO: setas, troca com Shift direito"
                                      : "AZUL (embaixo): W A S D    ·    VERMELHO (em cima): setas";

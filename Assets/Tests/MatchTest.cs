@@ -219,7 +219,41 @@ public class MatchTest
         Call("QuitToMenu");
         Cfg("format", "OneVsOne"); Call("ApplyFormat");
         Assert.IsFalse(reds[1].activeInHierarchy, "extra robots hidden in 1x1");
-        Assert.Less(Find("gol Visual").transform.position.x, 2000f, "1x1 rink is shorter than 3x3");
+        Assert.Greater(Find("gol Visual").transform.position.x, 2200f, "1x1 also plays on the big rink");
+    }
+
+    [UnityTest]
+    public IEnumerator TwoVsTwoOnBigRinkPlays()
+    {
+        yield return Load();
+        Cfg("players", "One"); Cfg("kind", "QuickMatch"); Cfg("difficulty", "Medium");
+        Cfg("goalsPerPeriod", 5); Cfg("minutesPerPeriod", 5); Cfg("arena", 0); Cfg("format", "TwoVsTwo");
+        Call("StartMatch");
+        var reds = Robots("Red"); var blues = Robots("Blue");
+        Assert.AreEqual(2, reds.Count(r => r.activeInHierarchy), "two red robots"); Assert.AreEqual(2, blues.Count(r => r.activeInHierarchy), "two blue robots");
+        Assert.Greater(Find("gol Visual").transform.position.x, 2200f, "2x2 plays on the big rink");
+        Assert.Greater(Mathf.Abs(reds[0].transform.position.z - reds[1].transform.position.z), 100f, "teammates start side by side");
+        Assert.IsTrue(Find("placar").activeInHierarchy, "scoreboard shown on the big rink");
+        yield return WaitState("Playing", 5);
+
+        var team = System.Enum.Parse(T("MatchManager+Team"), "Blue");
+        Call("SwitchRobot", team);
+        Assert.AreEqual(1, (int)mm.GetType().GetMethod("HumanIndex").Invoke(mm, new[] { team }), "switch to the teammate");
+
+        Time.timeScale = 3f;
+        float t = 0, minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
+        while (Score("marcadorverm", "pontosverm") + Score("marcadorazul", "pontosazul") == 0 && t < 120f)
+        {
+            t += Time.deltaTime;
+            foreach (var r in reds.Concat(blues).Where(r => r.activeInHierarchy)) { var p = r.transform.position; minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.z); maxZ = Mathf.Max(maxZ, p.z); }
+            yield return null;
+        }
+        Time.timeScale = 1f;
+        Debug.Log($"2x2: red {Score("marcadorverm", "pontosverm")} blue {Score("marcadorazul", "pontosazul")} after {t:F1}s, x {minX:F0}..{maxX:F0} z {minZ:F0}..{maxZ:F0}");
+        Assert.Greater(Score("marcadorverm", "pontosverm") + Score("marcadorazul", "pontosazul"), 0, "no goal in 120 s of 2x2");
+        Assert.Greater(minX, W(-400, 0).x - 230f); Assert.Less(maxX, W(1656, 0).x + 230f); Assert.Greater(minZ, W(0, -180).z); Assert.Less(maxZ, W(0, 980).z);
+        Call("QuitToMenu");
+        Cfg("format", "OneVsOne"); Call("ApplyFormat");
     }
 
     [UnityTest]

@@ -40,7 +40,7 @@ public class MatchManager : MonoBehaviour
     readonly GameObject[][] teams = new GameObject[2][];
     readonly int[] human = new int[2], attacker = { -1, -1 };
     Transform arena, placar; Vector3 placarPos; Light[] floods; Vector3[] floodPos;
-    public int RobotsPerTeam => GameConfig.format == GameConfig.Format.ThreeVsThree ? 3 : 1;
+    public int RobotsPerTeam => GameConfig.RobotsPerTeam;
     public GameObject[] TeamRobots(Team t) => teams[(int)t];
     public int HumanIndex(Team t) => human[(int)t];
     public GameObject Puck => puckGo;
@@ -98,23 +98,24 @@ public class MatchManager : MonoBehaviour
         return c;
     }
 
-    // 1x1 or 3x3 (bigger rink, extra robots). Called on start, from the setup screen and per match.
+    // 1x1, 2x2 or 3x3 robots a side, always on the big rink. Called on start, from the setup screen and per match.
     public void ApplyFormat()
     {
-        bool big = GameConfig.format == GameConfig.Format.ThreeVsThree;
-        Rink.Scale = big ? Rink.BigScale : Rink.NormalScale;
+        Rink.Scale = Rink.BigScale;
         if (arena) arena.localScale = new Vector3(Rink.Scale.x, 1f, Rink.Scale.y);
         Rink.ApplyKeeps();
         RinkBuilder.Rebuild();
-        // Scoreboard pole on the near side: moves back with the boards; on the 3x3 rink there's no room.
+        // Scoreboard: hung from the roof above the far boards, facing the rink (no room for its pole).
         if (placar)
         {
-            placar.position = placarPos + new Vector3(0, 0, -(537f * (Rink.Scale.y - 1f) + 40f));
-            placar.gameObject.SetActive(!big);
+            placar.gameObject.SetActive(true);
+            var sb = placar.GetComponent<ScoreboardDisplay>();
+            var hang = new Vector3(Rink.Center.x, ScoreboardDisplay.HangHeight, Rink.MaxZ + ScoreboardDisplay.HangOutside);
+            if (sb) sb.HangAt(hang); else placar.position = placarPos;
         }
         for (int i = 0; i < floods.Length; i++) { var f = floodPos[i]; floods[i].transform.position = Rink.W(f.x, f.z, f.y); }
         for (int t = 0; t < 2; t++)
-            for (int i = 1; i < 3; i++) teams[t][i].SetActive(big);
+            for (int i = 1; i < 3; i++) teams[t][i].SetActive(i < RobotsPerTeam);
         ApplyLoadouts();
         ResetRobots(); ResetPuck();
     }
@@ -444,17 +445,18 @@ public class MatchManager : MonoBehaviour
 
     // Kickoff spots in 1x1 coordinates (mapped onto the rink with Rink.W): [0] center forward, wings behind.
     static readonly Vector2[] RedSpots3 = { new Vector2(1343f, 400f), new Vector2(1470f, 160f), new Vector2(1470f, 640f) };
+    static readonly Vector2[] RedSpots2 = { new Vector2(1343f, 270f), new Vector2(1343f, 530f) };
 
     void ResetRobots()
     {
         if (teams[0] == null) { Place(red, redStart, redRot); Place(blue, blueStart, blueRot); return; }
-        bool big = RobotsPerTeam == 3;
+        var spots = RobotsPerTeam == 3 ? RedSpots3 : RobotsPerTeam == 2 ? RedSpots2 : null;
         for (int i = 0; i < RobotsPerTeam; i++)
         {
             Vector3 rp = Rink.W(redStart.x, redStart.z, redStart.y), bp = Rink.W(blueStart.x, blueStart.z, blueStart.y);
-            if (big)
+            if (spots != null)
             {
-                var s = RedSpots3[i];
+                var s = spots[i];
                 rp = Rink.W(s.x, s.y, redStart.y);
                 bp = Rink.W(2f * Rink.Center.x - s.x, 2f * Rink.Center.z - s.y, blueStart.y);
             }

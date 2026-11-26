@@ -6,23 +6,24 @@ public static class GameConfig
     public enum Players { One, Two }
     public enum Kind { QuickMatch, Tournament }
     public enum Difficulty { Easy, Medium, Hard }
-    public enum Format { OneVsOne, ThreeVsThree }
+    public enum Format { OneVsOne, TwoVsTwo, ThreeVsThree }
 
     public static Players players = Players.One;
     public static Kind kind = Kind.QuickMatch;
-    public static Format format = Format.OneVsOne;   // 3x3 = three robots a side on a bigger rink
+    public static Format format = Format.OneVsOne;   // robots a side; every format plays on the big rink
     public static Difficulty difficulty = Difficulty.Medium;
     public static int arena;                 // index into ArenaTheme.All
     public static int minutesPerPeriod = 2;
     public static int goalsPerPeriod = 3;    // a period also ends when a team reaches this
     public static float volume = 0.8f;
 
-    // Robot picks (RobotSpec ids). 1x1 uses slot 0; 3x3 uses all three.
+    // Robot picks (RobotSpec ids). 1x1 uses slot 0, 2x2 slots 0-1, 3x3 all three.
     public static string[] blueRobots = { "omega", "faisca", "trator" };
     public static string[] redRobots = { "omega", "canhao", "ima" };
     public static string[] Robots(bool blue) => blue ? blueRobots : redRobots;
-    public static int RobotsPerTeam => format == Format.ThreeVsThree ? 3 : 1;
-    public static bool WithinBudget(bool blue) => RobotsPerTeam < 3 || RobotCatalog.TeamWeight(Robots(blue), 3) <= RobotCatalog.TeamWeightBudget;
+    public static int RobotsPerTeam => format == Format.ThreeVsThree ? 3 : format == Format.TwoVsTwo ? 2 : 1;
+    public static string FormatName => RobotsPerTeam + " x " + RobotsPerTeam;
+    public static bool WithinBudget(bool blue) => RobotsPerTeam < 2 || RobotCatalog.TeamWeight(Robots(blue), RobotsPerTeam) <= RobotCatalog.BudgetFor(RobotsPerTeam);
 
     // Robot handling (old menu: mostradado.speed / rotaao).
     public static float speed { get => mostradado.speed; set => mostradado.speed = value; }
