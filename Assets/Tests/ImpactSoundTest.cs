@@ -42,7 +42,8 @@ public class ImpactSoundTest
         brb.position = new Vector3(red.transform.position.x - 260, brb.position.y, red.transform.position.z);
         yield return new WaitForFixedUpdate();
         brb.linearVelocity = new Vector3(1400, 0, 0);
-        t = 0; while ((int)S("PlayCount") == before && t < 3) { t += Time.deltaTime; yield return null; }
+        // Robots slide after a crash now, so later bumps (goal frame) can follow the clang.
+        t = 0; while ((string)S("LastPlayed") != "clang" && t < 3) { t += Time.deltaTime; yield return null; }
         Assert.Greater((int)S("PlayCount"), before, "robot -> robot made no sound");
         Assert.AreEqual("clang", (string)S("LastPlayed"), "last impact: " + S("LastPair"));
     }

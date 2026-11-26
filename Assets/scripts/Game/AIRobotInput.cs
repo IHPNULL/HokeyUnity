@@ -9,8 +9,14 @@ using UnityEngine;
 public class AIRobotInput : MonoBehaviour, IRobotInput
 {
     public Transform puck;
-    public Vector3 attackGoal = new Vector3(-400f, 10f, 400f); // goal the AI shoots at
-    public Vector3 ownGoal = new Vector3(1656f, 10f, 400f);    // goal the AI defends
+    public bool blueTeam;                    // false = red (defends the +x goal)
+    Vector3 attackGoal => blueTeam ? Rink.RedGoal : Rink.BlueGoal;   // goal the AI shoots at
+    Vector3 ownGoal => blueTeam ? Rink.BlueGoal : Rink.RedGoal;      // goal the AI defends
+
+    // 3x3: the team decides who goes for the puck. Attack = the 1x1 behaviour; Defend = hold
+    // the slot between the puck and our net; Support = wait upfield on the far side for a pass.
+    public enum Role { Attack, Defend, Support }
+    public Role role = Role.Attack;
 
     public float speedFraction = 0.8f, reactionDelay = 0.18f, aimError = 40f;
 
@@ -53,7 +59,6 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         return true;
     }
 
-    const float RinkMinX = -380f, RinkMaxX = 1636f, RinkMinZ = -110f, RinkMaxZ = 910f;
     readonly Queue<(float t, Vector3 p)> seen = new Queue<(float, Vector3)>();
     Vector3 lastPos, lastSeen; float stuckTime, reverseUntil, noise;
 
@@ -67,19 +72,26 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         }
     }
 
-    void OnEnable() { seen.Clear(); lastPos = transform.position; lastSeen = puck ? puck.position : Vector3.zero; lastSeen.y = 0; stuckTime = 0; reverseUntil = 0; }
+    Rigidbody body, puckBody;
+    // Physics-step positions: with interpolation on, transform.position lags the simulation.
+    Vector3 MyPos => body ? body.position : transform.position;
+    Vector3 PuckPos => puckBody ? puckBody.position : puck.position;
+
+    void OnEnable() { seen.Clear(); body = GetComponent<Rigidbody>(); puckBody = puck ? puck.GetComponent<Rigidbody>() : null; lastPos = MyPos; lastSeen = puck ? PuckPos : Vector3.zero; lastSeen.y = 0; stuckTime = 0; reverseUntil = 0; }
 
     void FixedUpdate()
     {
-        if (puck == null || moverp1.Frozen) { Drive = Turn = 0; stuckTime = 0; lastPos = transform.position; lastPos.y = 0; return; }
+        if (puck == null || moverp1.Frozen) { Drive = Turn = 0; stuckTime = 0; lastPos = MyPos; lastPos.y = 0; return; }
         float now = Time.time;
-        seen.Enqueue((now, puck.position));
+        if (puckBody == null || puckBody.transform != puck) puckBody = puck.GetComponent<Rigidbody>();
+        seen.Enqueue((now, PuckPos));
         while (seen.Count > 1 && seen.Peek().t < now - reactionDelay) seen.Dequeue();
         Vector3 p = seen.Peek().p; p.y = 0;
 
-        Vector3 me = transform.position; me.y = 0;
-        Vector3 fwd = -transform.up; fwd.y = 0; fwd.Normalize();
-        Vector3 up = transform.forward; // robot's spin axis (world up)
+        Quaternion rot = body ? body.rotation : transform.rotation;
+        Vector3 me = MyPos; me.y = 0;
+        Vector3 fwd = rot * Vector3.down; fwd.y = 0; fwd.Normalize();
+        Vector3 up = rot * Vector3.forward; // robot's spin axis (world up)
 
         // Aim point inside the attack goal, wobbling with difficulty.
         noise = Mathf.PerlinNoise(now * 0.3f, 7f) * 2f - 1f;
@@ -130,21 +142,39 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         else target = behind;
         // Defend: puck sliding toward our net and we're not between them -> race back to the goal mouth.
         Vector3 pv = (p - lastSeen) / Mathf.Max(Time.fixedDeltaTime, 1e-4f); lastSeen = p;
-        Vector3 outward = (og - new Vector3(634f, 0, 400f)).normalized;   // from rink center toward our net
+        Vector3 outward = (og - Rink.Center).normalized;   // from rink center toward our net
         bool goalSide = (me - og).magnitude < (p - og).magnitude - 40f;
         bool defend = Vector3.Dot(pv, outward) > 350f && !goalSide;
+        bool sprint = defend;   // racing the puck back to our net: every difficulty hustles
         if (defend) { target = og - outward * 200f + Vector3.forward * Mathf.Clamp(p.z - og.z, -180f, 180f); lined = false; }
+
+        // Team roles (3x3). A defender or supporter still plays the puck when it comes close.
+        float puckDist = Vector3.Distance(me, p);
+        if (role == Role.Defend && !(puckDist < 260f && goalSide))
+        {
+            Vector3 toPuck = p - og; float d = toPuck.magnitude;
+            target = og + toPuck / Mathf.Max(d, 1f) * Mathf.Clamp(d * 0.4f, 220f, 650f);
+            if (Vector3.Distance(me, target) < 80f) target = p;   // in the slot: face the puck
+            lined = false; defend = true;
+        }
+        else if (role == Role.Support && puckDist > 300f)
+        {
+            Vector3 ag = attackGoal; ag.y = 0;
+            target = new Vector3(Mathf.Lerp(p.x, ag.x, 0.45f), 0, Rink.Center.z + (Rink.Center.z - p.z) * 0.6f);
+            if (Vector3.Distance(me, target) < 80f) target = p;
+            lined = false;
+        }
 
         // Never loiter in our own net: drive back out in front of it.
         bool inNet = Vector3.Dot(me - og, outward) > -40f;
         if (inNet) { target = og - outward * 260f; lined = false; }
 
-        Mode = inNet ? "exit" : defend ? "defend" : !room ? (ramHome ? "goal-side" : "ram") : lined ? "charge" : wrongSide ? "around" : "behind";
+        Mode = inNet ? "exit" : role == Role.Support && puckDist > 300f ? "support" : defend ? "defend" : !room ? (ramHome ? "goal-side" : "ram") : lined ? "charge" : wrongSide ? "around" : "behind";
 
         target = AvoidObstacles(me, target);
 
-        target.x = Mathf.Clamp(target.x, RinkMinX + 60f, RinkMaxX - 60f);
-        target.z = Mathf.Clamp(target.z, RinkMinZ + 60f, RinkMaxZ - 60f);
+        target.x = Mathf.Clamp(target.x, Rink.MinX + 60f, Rink.MaxX - 60f);
+        target.z = Mathf.Clamp(target.z, Rink.MinZ + 60f, Rink.MaxZ - 60f);
         Target = target;
 
         Vector3 to = target - me;
@@ -153,7 +183,7 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         float drive = Mathf.Abs(angle) < 50f ? 1f : Mathf.Abs(angle) < 100f ? 0.45f : 0.15f;
         if (to.magnitude < 60f && !lined) drive *= 0.4f;
         // Turning circle at full speed is ~vel/turnRate; slow down when the target is inside it.
-        float turnRadius = mostradado.speed * speedFraction * Time.fixedDeltaTime / (Mathf.Max(1, mostradado.rotaao) * Mathf.Deg2Rad);
+        float turnRadius = mostradado.speed * speedFraction * 0.02f / (Mathf.Max(1, mostradado.rotaao) * Mathf.Deg2Rad);   // rotaao = deg per 50 Hz step
         if (Mathf.Abs(angle) > 30f && to.magnitude < turnRadius * 1.6f) drive *= 0.35f;
 
         // Unstick: pinned against a wall or the other robot.
@@ -163,7 +193,7 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         if (stuckTime > 0.8f) { reverseUntil = now + 0.5f; stuckTime = 0; }
         if (now < reverseUntil) { drive = -1f; turn = 0.6f; }
 
-        Drive = drive * speedFraction;
+        Drive = drive * (sprint && role != Role.Defend ? Mathf.Max(speedFraction, 0.9f) : speedFraction);
         Turn = turn;
     }
 }

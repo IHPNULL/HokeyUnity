@@ -84,8 +84,8 @@ public class GameUI : MonoBehaviour
     {
         setup = Stretch("Setup", root);
         var panel = Img("Panel", setup.transform, Bg, round);
-        var pr = panel.rectTransform; pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f); pr.sizeDelta = new Vector2(980, 960);
-        var col = Column("Col", panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(880, 900), 12);
+        var pr = panel.rectTransform; pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f); pr.sizeDelta = new Vector2(980, 1010);
+        var col = Column("Col", panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(880, 960), 10);
 
         setupHeader = Label(col, "1 JOGADOR", 64, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold); Size(setupHeader, 880, 90);
         Spacer(col, 6);
@@ -95,6 +95,8 @@ public class GameUI : MonoBehaviour
 
         Row(col, "Modo", () => GameConfig.kind == GameConfig.Kind.QuickMatch ? "Partida rápida" : "Torneio",
             d => GameConfig.kind = GameConfig.kind == GameConfig.Kind.QuickMatch ? GameConfig.Kind.Tournament : GameConfig.Kind.QuickMatch, OneP);
+        Row(col, "Formato", () => GameConfig.format == GameConfig.Format.ThreeVsThree ? "3 x 3 (arena grande)" : "1 x 1",
+            d => { GameConfig.format = GameConfig.format == GameConfig.Format.OneVsOne ? GameConfig.Format.ThreeVsThree : GameConfig.Format.OneVsOne; if (MatchManager.Instance) MatchManager.Instance.ApplyFormat(); }, () => true);
         Row(col, "Arena", () => ArenaTheme.Names[GameConfig.arena],
             d => { GameConfig.arena = (GameConfig.arena + d + ArenaTheme.Names.Length) % ArenaTheme.Names.Length; ArenaTheme.Apply(GameConfig.arena); }, () => !Tour());
         Row(col, "Dificuldade", () => GameConfig.Name(GameConfig.difficulty),
@@ -220,7 +222,10 @@ public class GameUI : MonoBehaviour
             foreach (var s in GameConfig.Ladder) parts.Add(ArenaTheme.Names[s.arena] + " (" + GameConfig.Name(s.diff) + ")");
             ladderText.text = "3 partidas: " + string.Join("  →  ", parts);
         }
-        setupHint.text = one ? "Você é o AZUL · dirija com W A S D ou as setas" : "AZUL (embaixo): W A S D    ·    VERMELHO (em cima): setas";
+        bool three = GameConfig.format == GameConfig.Format.ThreeVsThree;
+        setupHint.text = one ? "Você é o AZUL · dirija com W A S D ou as setas" + (three ? " · Tab troca de robô" : "")
+                             : three ? "AZUL: W A S D, troca com Tab  ·  VERMELHO: setas, troca com Shift direito"
+                                     : "AZUL (embaixo): W A S D    ·    VERMELHO (em cima): setas";
     }
 
     void Refresh()
@@ -312,7 +317,7 @@ public class GameUI : MonoBehaviour
     void Row(Transform parent, string label, Func<string> get, Action<int> change, Func<bool> visible)
     {
         var bg = Img(label, parent, Panel2, round);
-        var le = bg.gameObject.AddComponent<LayoutElement>(); le.preferredWidth = 880; le.preferredHeight = 70;
+        var le = bg.gameObject.AddComponent<LayoutElement>(); le.preferredWidth = 880; le.preferredHeight = 64;
         var l = Label(bg.transform, label, 32, Color.white, TextAnchor.MiddleLeft); Fill(l.rectTransform); l.rectTransform.offsetMin = new Vector2(28, 0);
         Text value = null;
         var minus = Btn(bg.transform, "‹", () => { change(-1); RefreshSetup(); }, 64, 56, false);

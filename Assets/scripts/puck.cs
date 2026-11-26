@@ -3,14 +3,14 @@
 public class puck : MonoBehaviour
 {
     public bool enter = false;
-    public static Vector3 originalPos;
+    // Face-off spot (follows the rink size in 3x3).
+    public static Vector3 originalPos => Rink.W(668.3125f, 390.6067f, 67.53125f);
 
     Rigidbody rb;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
-        originalPos = new Vector3(668.3125f, 67.53125f, 390.6067f);
         ResetToCenter();
     }
 
@@ -24,6 +24,21 @@ public class puck : MonoBehaviour
     {
         if (goalName == "gol") { enter = true; marcadorazul.pontosazul++; ResetToCenter(); }
         else if (goalName == "gol (1)") { enter = true; marcadorverm.pontosverm++; ResetToCenter(); }
+    }
+
+    // Keep the puck in play: hard hits off the robots' wedge noses can pop it up and over the
+    // net or boards. Cap the lift, and if it still ends up outside the rink, face off again.
+    public static int OutOfPlayCount;   // for tests
+    void FixedUpdate()
+    {
+        if (rb == null) return;
+        var v = rb.linearVelocity;
+        if (v.y > 250f) { v.y = 250f; rb.linearVelocity = v; }
+        var p = rb.position;
+        float sx = Rink.Scale.x, sz = Rink.Scale.y;
+        bool outX = p.x < Rink.BlueGoal.x - 260f * sx || p.x > Rink.RedGoal.x + 260f * sx;
+        bool outZ = p.z < Rink.MinZ - 120f * sz || p.z > Rink.MaxZ + 120f * sz;
+        if (outX || outZ || p.y < -60f || p.y > 600f) { OutOfPlayCount++; ResetToCenter(); }
     }
 
     void ResetToCenter()

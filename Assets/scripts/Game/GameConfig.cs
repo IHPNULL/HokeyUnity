@@ -6,9 +6,11 @@ public static class GameConfig
     public enum Players { One, Two }
     public enum Kind { QuickMatch, Tournament }
     public enum Difficulty { Easy, Medium, Hard }
+    public enum Format { OneVsOne, ThreeVsThree }
 
     public static Players players = Players.One;
     public static Kind kind = Kind.QuickMatch;
+    public static Format format = Format.OneVsOne;   // 3x3 = three robots a side on a bigger rink
     public static Difficulty difficulty = Difficulty.Medium;
     public static int arena;                 // index into ArenaTheme.All
     public static int minutesPerPeriod = 2;

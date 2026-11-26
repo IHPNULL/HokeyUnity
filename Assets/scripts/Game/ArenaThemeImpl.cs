@@ -86,7 +86,7 @@ public static partial class ArenaTheme
         var volGo = FindPath("Global Volume");
         // .profile = a per-session copy, so play mode never edits the asset on disk.
         if (volGo && volGo.GetComponent<Volume>().profile.TryGet(out grade)) { gradeFilter = grade.colorFilter.value; gradeExposure = grade.postExposure.value; }
-        puckRb = FindPath("JOGANDO/arena/PUCK").GetComponent<Rigidbody>(); puckDrag = puckRb.linearDamping;
+        puckRb = (FindPath("JOGANDO/arena/PUCK") ?? FindPath("JOGANDO/PUCK")).GetComponent<Rigidbody>(); puckDrag = puckRb.linearDamping;
 
         iceMat = new Material(woodMat) { name = "Ice (runtime)" };
         iceMat.SetTexture("_BaseMap", IceTexture()); iceMat.SetTextureScale("_BaseMap", new Vector2(5, 2));

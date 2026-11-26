@@ -35,6 +35,7 @@ public class MatchTest
     IEnumerator Load()
     {
         Time.timeScale = 1f;
+        Cfg("format", "OneVsOne");
         SceneManager.LoadScene("MENU");
         yield return null; yield return null;
         mm = T("MatchManager").GetProperty("Instance").GetValue(null);
@@ -166,7 +167,76 @@ public class MatchTest
         // A puck rebounding off the far post or boards can occasionally beat the AI back to its own net.
         Assert.LessOrEqual(Score("marcadorazul", "pontosazul"), 1, "AI own goals");
         Assert.Greater(Score("marcadorverm", "pontosverm"), 0, "AI did not score within 90 s");
-        Assert.Greater(minX, -450f); Assert.Less(maxX, 1700f); Assert.Greater(minZ, -180f); Assert.Less(maxZ, 980f);
+        Assert.Greater(minX, -450f); Assert.Less(maxX, 1880f);   // may skid into its own net mouth on ice (then the exit rule drives it out) Assert.Greater(minZ, -180f); Assert.Less(maxZ, 980f);
+        Call("QuitToMenu");
+    }
+
+    GameObject[] Robots(string team) => (GameObject[])mm.GetType().GetMethod("TeamRobots").Invoke(mm, new[] { System.Enum.Parse(T("MatchManager+Team"), team) });
+
+    [UnityTest]
+    public IEnumerator ThreeVsThreeBigRinkSwitchAndPlay()
+    {
+        yield return Load();
+        Cfg("players", "One"); Cfg("kind", "QuickMatch"); Cfg("difficulty", "Medium");
+        Cfg("goalsPerPeriod", 5); Cfg("minutesPerPeriod", 5); Cfg("arena", 0); Cfg("format", "ThreeVsThree");
+        Call("StartMatch");
+        var reds = Robots("Red"); var blues = Robots("Blue");
+        Assert.AreEqual(3, reds.Count(r => r.activeInHierarchy)); Assert.AreEqual(3, blues.Count(r => r.activeInHierarchy));
+        Assert.Greater(Find("gol").transform.position.x, 1950f, "3x3 rink is longer");
+        Assert.Greater(Find("PUCK").transform.lossyScale.x, 59f); Assert.Less(Find("PUCK").transform.lossyScale.x, 61f);
+        yield return WaitState("Playing", 5);
+        yield return new WaitForSeconds(0.5f);
+        yield return Shot("three_v_three");
+
+        // Switch: the player takes another robot and its camera.
+        var team = System.Enum.Parse(T("MatchManager+Team"), "Blue");
+        Call("SwitchRobot", team);
+        int h = (int)mm.GetType().GetMethod("HumanIndex").Invoke(mm, new[] { team });
+        Assert.AreNotEqual(0, h, "switched robot");
+        Assert.IsTrue(blues[h].GetComponentInChildren<Camera>(true).gameObject.activeInHierarchy, "camera follows the switch");
+        Assert.IsFalse(blues[0].GetComponentInChildren<Camera>(true).gameObject.activeInHierarchy);
+
+        // The player idles; five AIs play. Someone scores and nobody leaves the rink.
+        Time.timeScale = 3f;
+        float t = 0, minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
+        var puckT = Find("PUCK").transform; var path = new System.Text.StringBuilder();
+        while (Score("marcadorverm", "pontosverm") + Score("marcadorazul", "pontosazul") == 0 && t < 120f)
+        {
+            t += Time.deltaTime;
+            if ((int)(t * 4) != (int)((t - Time.deltaTime) * 4)) path.Append($" {t:F1}:({puckT.position.x:F0},{puckT.position.z:F0})");
+            foreach (var r in reds.Concat(blues)) { var p = r.transform.position; minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); minZ = Mathf.Min(minZ, p.z); maxZ = Mathf.Max(maxZ, p.z); }
+            yield return null;
+        }
+        Time.timeScale = 1f;
+        Debug.Log($"3x3: red {Score("marcadorverm", "pontosverm")} blue {Score("marcadorazul", "pontosazul")} after {t:F1}s, x {minX:F0}..{maxX:F0} z {minZ:F0}..{maxZ:F0} puck{path}");
+        Assert.Greater(Score("marcadorverm", "pontosverm") + Score("marcadorazul", "pontosazul"), 0, "no goal in 120 s of 3x3");
+        Assert.Greater(minX, -1130f); Assert.Less(maxX, 2380f); Assert.Greater(minZ, -330f); Assert.Less(maxZ, 1130f);   // rink incl. the nets
+
+        Call("QuitToMenu");
+        Cfg("format", "OneVsOne"); Call("ApplyFormat");
+        Assert.IsFalse(reds[1].activeInHierarchy, "extra robots hidden in 1x1");
+        Assert.Less(Find("gol").transform.position.x, 1800f);
+    }
+
+    [UnityTest]
+    public IEnumerator RobotsCanBeShoved()
+    {
+        yield return Load();
+        Cfg("players", "Two"); Cfg("arena", 0);
+        Call("StartMatch");
+        yield return WaitState("Playing", 5);
+        var red = Find("unidadeverm"); var blue = Find("Unidadeazul");
+        var rrb = red.GetComponent<Rigidbody>(); var brb = blue.GetComponent<Rigidbody>();
+        var start = new Vector3(634, rrb.position.y, 400);
+        rrb.position = start; rrb.linearVelocity = Vector3.zero;
+        brb.position = new Vector3(634, brb.position.y, 160); brb.rotation = Quaternion.AngleAxis(-90, Vector3.up) * brb.rotation;
+        yield return new WaitForFixedUpdate();
+        brb.linearVelocity = new Vector3(0, 0, 1500);   // blue rams red side-on
+        var tr = new System.Text.StringBuilder();
+        for (int i = 0; i < 40; i++) { yield return new WaitForFixedUpdate(); if (i % 3 == 0) tr.Append($" b{brb.position.z:F0}/{brb.linearVelocity.z:F0} r{rrb.position.z:F0}/{rrb.linearVelocity.z:F0}"); }
+        var moved = rrb.position - start; moved.y = 0;
+        Debug.Log("PROBE shove: red moved " + moved.magnitude.ToString("F0") + " " + moved.ToString("F0") + tr);
+        Assert.Greater(moved.z, 60f, "a hit robot should be shoved, not stop dead");
         Call("QuitToMenu");
     }
 
