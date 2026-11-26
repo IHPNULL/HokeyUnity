@@ -80,6 +80,9 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
 
     readonly Queue<(float t, Vector3 p)> seen = new Queue<(float, Vector3)>();
     Vector3 lastPos, lastSeen; float stuckTime, reverseUntil, noise;
+    bool backingOut;
+    moverp1 mover;   // carrying the puck too close to (or past) the goal line: drive out to the slot first
+    const float SlotDepth = 420f, TooDeep = 240f;   // distances in front of the goal along the rink axis
 
     public void SetDifficulty(GameConfig.Difficulty d)
     {
@@ -154,8 +157,10 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
             // Swing around the puck on whichever side the robot already is.
             Vector3 side = Vector3.Cross(Vector3.up, shotDir);
             float s = Mathf.Sign(Vector3.Dot(me - p, side)); if (s == 0) s = 1;
-            target = p - shotDir * 140f + side * s * 170f;
-            if (!Clear(p, target - p, (target - p).magnitude + RobotBack)) target = p - shotDir * 140f - side * s * 170f;
+            // On ice the robot slides wide; give the puck a wider berth so the swing doesn't clip it toward our net.
+            float berth = Mathf.Lerp(1.55f, 1f, moverp1.Grip);
+            target = p - shotDir * 140f * berth + side * s * 170f * berth;
+            if (!Clear(p, target - p, (target - p).magnitude + RobotBack)) target = p - shotDir * 140f * berth - side * s * 170f * berth;
         }
         else if (Vector3.Distance(me, behind) < 150f) target = p;   // at the setup spot: turn to face the puck
         else target = behind;
@@ -192,13 +197,25 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         // Claw: carrying the puck -> drive at the goal (the tool code below shoots when aimed).
         if (tools == null) tools = GetComponent<RobotTools>();
         bool carry = tools != null && tools.Holding;
-        if (carry) { target = aim; lined = true; defend = false; }
+        if (carry)
+        {
+            // Shoot from the slot in front of the net. A robot that carried the puck down beside the net or past
+            // the goal line can't turn to face the goal there (the aim point sits inside its turning circle), so it
+            // backs out to the slot first; hysteresis keeps it from flip-flopping.
+            Vector3 into = aim - Rink.Center; into.y = 0; into.Normalize();          // rink centre -> into the net
+            float depth = Vector3.Dot(me - aim, into);                                // 0 on the goal line, < 0 in front
+            if (depth > -TooDeep) backingOut = true;
+            else if (depth < -SlotDepth + 60f) backingOut = false;
+            target = backingOut ? aim - into * SlotDepth : aim;
+            lined = !backingOut; defend = false;
+        }
+        else backingOut = false;
 
         // Never loiter in our own net: drive back out in front of it.
         bool inNet = Vector3.Dot(me - og, outward) > -40f;
         if (inNet) { target = og - outward * 260f; lined = false; }
 
-        Mode = inNet ? "exit" : carry ? "carry" : role == Role.Support && puckDist > 300f ? "support" : defend ? "defend" : danger ? "goal-side" : !room ? (ramHome ? "goal-side" : "ram") : lined ? "charge" : wrongSide ? "around" : "behind";
+        Mode = inNet ? "exit" : carry ? (backingOut ? "carry-out" : "carry") : role == Role.Support && puckDist > 300f ? "support" : defend ? "defend" : danger ? "goal-side" : !room ? (ramHome ? "goal-side" : "ram") : lined ? "charge" : wrongSide ? "around" : "behind";
 
         target = AvoidObstacles(me, target);
 
@@ -251,6 +268,26 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         if (Mathf.Abs(angle) > 30f && to.magnitude < turnRadius * 1.6f) drive *= 0.35f;
         if (reflex) drive = Mathf.Max(drive, 0.8f);   // overtake, don't hang back
         if (keeper) drive = Mathf.Max(drive, 0.9f);
+
+        // Swinging around the puck on low grip: ease off close to it, or the slide knocks it toward our own net.
+        if (Mode == "around" && moverp1.Grip < 0.5f && Vector3.Distance(me, p) < 320f) drive = Mathf.Min(drive, 0.55f);
+
+        // Never overrun our own goal line: racing back (defend, dodge, keeper) at full speed, a robot on ice
+        // (a third of the grip) slides ~400 units before it stops and shoves the puck into its own net.
+        // Lift off once the stopping distance, from the real grip, reaches the room left before the line.
+        if (!carry && body)
+        {
+            Vector3 v = body.linearVelocity; v.y = 0;
+            float vOut = Vector3.Dot(v, outward);                                   // speed toward our goal line
+            if (vOut > 150f)
+            {
+                if (mover == null) mover = GetComponent<moverp1>();
+                float grip = Mathf.Lerp(0.35f, 1f, moverp1.Grip) * (mover ? mover.gripMul : 1f);
+                float brake = 2.2f * mostradado.speed * (mover ? mover.speedMul : 1f) * grip;   // moverp1 coast decel
+                float lineRoom = Vector3.Dot(og - me, outward) - 120f;                // stop a bit in front of the line
+                if (vOut * vOut / (2f * Mathf.Max(brake, 1f)) > lineRoom && Vector3.Dot(fwd, outward) > 0f) drive = 0f;
+            }
+        }
 
         // Unstick: pinned against a wall or the other robot.
         float moved = (me - lastPos).magnitude / Mathf.Max(Time.fixedDeltaTime, 1e-4f);

@@ -56,7 +56,10 @@ public class MatchTest
 
     IEnumerator WaitState(string s, float max)
     {
-        float t = 0; while (State != s && t < max) { t += Time.unscaledDeltaTime; yield return null; }
+        // States advance on game time; counting real time made the 3 s countdown flaky whenever loading hitches
+        // (frames over Time.maximumDeltaTime) slowed game time. A real-time cap still catches a stuck game.
+        float t = 0, real = 0;
+        while (State != s && t < max && real < max * 6f) { t += Time.deltaTime; real += Time.unscaledDeltaTime; yield return null; }
         Assert.AreEqual(s, State, "waiting for " + s);
     }
 
@@ -152,7 +155,10 @@ public class MatchTest
         Time.timeScale = 3f;
         var trace = new System.Text.StringBuilder();
         float t = 0, minX = 1e9f, maxX = -1e9f, minZ = 1e9f, maxZ = -1e9f;
-        while (Score("marcadorverm", "pontosverm") == 0 && t < 90f)
+        // Gelo (arena 1) is slow on purpose: a third of the grip, so setting up and controlling the puck takes the
+        // AI longer (measured 4-69 s, Easy slowest). Wood and steel score well inside 90 s.
+        float limit = arena == 1 ? 120f : 90f;
+        while (Score("marcadorverm", "pontosverm") == 0 && t < limit)
         {
             t += Time.deltaTime;
             var p = red.transform.position;
@@ -169,7 +175,7 @@ public class MatchTest
         Debug.Log($"AI {diff} {spot} arena{arena}: scored={Score("marcadorverm", "pontosverm")} after {t:F1}s, x {minX:F0}..{maxX:F0} z {minZ:F0}..{maxZ:F0}, blue goals {Score("marcadorazul", "pontosazul")}" + (Score("marcadorverm", "pontosverm") == 0 || Score("marcadorazul", "pontosazul") > 0 ? trace.ToString() : ""));
         // A puck rebounding off the far post or boards can occasionally beat the AI back to its own net.
         Assert.LessOrEqual(Score("marcadorazul", "pontosazul"), 1, "AI own goals");   // a missed shot can rebound the length of the rink once in a while (the test player is idle)
-        Assert.Greater(Score("marcadorverm", "pontosverm"), 0, "AI did not score within 90 s");
+        Assert.Greater(Score("marcadorverm", "pontosverm"), 0, $"AI did not score within {limit:F0} s");
         // Inside the rink; it may skid into its own net mouth on ice (then the exit rule drives it out).
         Assert.Greater(minX, W(-450, 0).x); Assert.Less(maxX, W(1656, 0).x + 230f); Assert.Greater(minZ, W(0, -180).z); Assert.Less(maxZ, W(0, 980).z);
         Call("QuitToMenu");

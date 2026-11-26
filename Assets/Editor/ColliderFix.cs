@@ -20,8 +20,8 @@ public static class ColliderFix
                 if (c.isTrigger) { c.isTrigger = false; log.AppendLine("hull solid: " + robot + "/" + c.name); }
 
         // 2. Bounce: puck and boards.
-        var puckMat = PhysMat("Assets/Materials/Physics/Puck.physicsMaterial", 0.02f, 0.02f, 0.7f, PhysicsMaterialCombine.Minimum, PhysicsMaterialCombine.Maximum);
-        var boardMat = PhysMat("Assets/Materials/Physics/Boards.physicsMaterial", 0.1f, 0.1f, 0.6f, PhysicsMaterialCombine.Average, PhysicsMaterialCombine.Average);
+        var puckMat = PhysMat("Assets/Materials/Physics/Puck.physicMaterial", 0.02f, 0.02f, 0.7f, PhysicsMaterialCombine.Minimum, PhysicsMaterialCombine.Maximum);
+        var boardMat = PhysMat("Assets/Materials/Physics/Boards.physicMaterial", 0.1f, 0.1f, 0.6f, PhysicsMaterialCombine.Average, PhysicsMaterialCombine.Average);
         var puck = ShotTool.Find("JOGANDO/arena/PUCK");
         puck.GetComponent<Collider>().sharedMaterial = puckMat;
         var prb = puck.GetComponent<Rigidbody>();

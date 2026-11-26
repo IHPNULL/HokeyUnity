@@ -58,6 +58,24 @@ public class PhysicsProbeTest
         Assert.Less(prb.position.x, arm.min.x, "puck went into/through the robot's arm");
     }
 
+    // The puck glides and bounces because of its physics material. Its values once lived only in the
+    // Editor's memory (an unrecognised file extension was never saved) and an Editor restart silently
+    // reset them to Unity's defaults (friction 0.6, no bounce): the puck stuck to the floor.
+    [UnityTest]
+    public IEnumerator PuckAndBoardMaterialsAreTuned()
+    {
+        yield return Setup();
+        var pm = prb.GetComponent<Collider>().sharedMaterial;
+        Assert.IsNotNull(pm, "puck has a physics material");
+        Assert.LessOrEqual(pm.dynamicFriction, 0.05f, "puck glides (low friction)");
+        Assert.GreaterOrEqual(pm.bounciness, 0.5f, "puck bounces");
+        Assert.AreEqual(PhysicsMaterialCombine.Minimum, pm.frictionCombine);
+        Assert.AreEqual(PhysicsMaterialCombine.Maximum, pm.bounceCombine);
+        var glass = Find("Glass").GetComponent<Collider>().sharedMaterial;
+        Assert.IsNotNull(glass, "boards have a physics material");
+        Assert.GreaterOrEqual(glass.bounciness, 0.5f, "boards are bouncy");
+    }
+
     [UnityTest]
     public IEnumerator PuckBouncesOffGoalPost()
     {
