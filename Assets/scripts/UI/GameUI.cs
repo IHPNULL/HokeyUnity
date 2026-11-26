@@ -14,7 +14,9 @@ public class GameUI : MonoBehaviour
     Sprite round, circle;
     RectTransform root;
 
-    GameObject title, setup, robots, hud, pause, result;
+    GameObject title, setup, robots, online, hud, pause, result;
+    InputField ipField; Text onlineStatus;
+    readonly List<(bool blue, Button[] buttons)> slotButtons = new();
     readonly List<(Text text, Func<string> get, Func<bool> visible)> dyn = new();   // robot screen labels
     Button startButton; Text robotsHint;
     Text setupHeader, setupHint, ladderText;
@@ -45,6 +47,7 @@ public class GameUI : MonoBehaviour
         Build();
         mm.StateChanged += Refresh;
         mm.Banner += ShowBanner;
+        NetSession.Changed += OnNetChanged;
         Refresh();
     }
 
@@ -62,7 +65,7 @@ public class GameUI : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize; scaler.referenceResolution = new Vector2(1920, 1080); scaler.matchWidthOrHeight = 0.5f;
         root = (RectTransform)cgo.transform;
 
-        BuildTitle(); BuildSetup(); BuildRobots(); BuildHud(); BuildPause(); BuildResult();
+        BuildTitle(); BuildSetup(); BuildRobots(); BuildOnline(); BuildHud(); BuildPause(); BuildResult();
     }
 
     void BuildTitle()
@@ -78,6 +81,7 @@ public class GameUI : MonoBehaviour
         Spacer(col, 30);
         Btn(col, "1 JOGADOR", () => OpenSetup(GameConfig.Players.One), 460, 84, true);
         Btn(col, "2 JOGADORES", () => OpenSetup(GameConfig.Players.Two), 460, 84, false);
+        Btn(col, "ONLINE", OpenOnline, 460, 84, false);
         Btn(col, "SAIR", Quit, 460, 72, false, ghost: true);
         ((VerticalLayoutGroup)col.GetComponent<LayoutGroup>()).childAlignment = TextAnchor.MiddleLeft;
     }
@@ -116,7 +120,7 @@ public class GameUI : MonoBehaviour
         setupHint = Label(col, "", 26, Dim, TextAnchor.MiddleCenter); Size(setupHint, 880, 60);
 
         var buttons = RowGroup("Buttons", col, 880, 96, 24);
-        Btn(buttons, "VOLTAR", () => { setup.SetActive(false); title.SetActive(true); Select(title); }, 300, 84, false, ghost: true);
+        Btn(buttons, "VOLTAR", () => { if (NetSession.Online) { LeaveOnline(); return; } setup.SetActive(false); title.SetActive(true); Select(title); }, 300, 84, false, ghost: true);
         Btn(buttons, "JOGAR", OpenRobots, 420, 84, true);
     }
 
@@ -140,13 +144,21 @@ public class GameUI : MonoBehaviour
             v.childControlWidth = v.childControlHeight = true; v.childForceExpandWidth = v.childForceExpandHeight = false;
 
             var head = Label(c, "", 32, blue ? MatchManager.BlueColor : MatchManager.RedColor, TextAnchor.MiddleLeft, FontStyle.Bold); Size(head, 800, 48);
-            dyn.Add((head, () => blue ? "AZUL" + (GameConfig.players == GameConfig.Players.One ? " · você" : "") : "VERMELHO" + (GameConfig.players == GameConfig.Players.One ? " · computador" : ""), () => true));
+            dyn.Add((head, () => NetSession.Online
+                ? (blue ? "AZUL" + (NetSession.IsHost ? " · você (anfitrião)" : " · anfitrião") : "VERMELHO" + (NetSession.IsClient ? " · você" : " · convidado"))
+                : blue ? "AZUL" + (GameConfig.players == GameConfig.Players.One ? " · você" : "") : "VERMELHO" + (GameConfig.players == GameConfig.Players.One ? " · computador" : ""), () => true));
             for (int i = 0; i < 3; i++)
             {
                 int slot = i;
                 Func<bool> vis = () => slot < GameConfig.RobotsPerTeam;
                 Row(c, (blue ? "Azul " : "Vermelho ") + (i + 1), () => RobotCatalog.Get(GameConfig.Robots(blue)[slot])?.displayName ?? "-",
-                    d => { var ids = GameConfig.Robots(blue); ids[slot] = RobotCatalog.Next(ids[slot], d); if (mm) mm.ApplyLoadouts(); }, vis, 800);
+                    d =>
+                    {
+                        var ids = GameConfig.Robots(blue); ids[slot] = RobotCatalog.Next(ids[slot], d);
+                        if (mm) mm.ApplyLoadouts();
+                        if (NetSession.IsClient && NetSession.Instance) NetSession.Instance.SendPicks();
+                    }, vis, 800);
+                slotButtons.Add((blue, rows[rows.Count - 1].row.GetComponentsInChildren<Button>(true)));
                 var st = Label(c, "", 22, Dim, TextAnchor.MiddleLeft); Size(st, 800, 30);
                 dyn.Add((st, () => "   " + RobotCatalog.Stats(RobotCatalog.Get(GameConfig.Robots(blue)[slot])), vis));
             }
@@ -160,10 +172,84 @@ public class GameUI : MonoBehaviour
 
         robotsHint = Label(col, "", 24, Dim, TextAnchor.MiddleCenter); Size(robotsHint, 1680, 40);
         var buttons = RowGroup("Buttons", col, 1680, 96, 24);
-        Btn(buttons, "VOLTAR", () => { robots.SetActive(false); setup.SetActive(true); RefreshSetup(); Select(setup); }, 300, 84, false, ghost: true);
+        Btn(buttons, "VOLTAR", () => { if (NetSession.IsClient) { LeaveOnline(); return; } robots.SetActive(false); setup.SetActive(true); RefreshSetup(); Select(setup); }, 300, 84, false, ghost: true);
         startButton = Btn(buttons, "COMEÇAR", Play, 420, 84, true);
         robots.SetActive(false);
     }
+
+    // Online: host a game or join one by IP.
+    void BuildOnline()
+    {
+        online = Stretch("Online", root);
+        var panel = Img("Panel", online.transform, Bg, round);
+        var pr = panel.rectTransform; pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f); pr.sizeDelta = new Vector2(1100, 780);
+        var col = Column("Col", panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(1000, 720), 18);
+        var h = Label(col, "JOGAR ONLINE", 60, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold); Size(h, 1000, 84);
+        var info = Label(col, "Um jogador hospeda (AZUL) e o outro entra pelo IP (VERMELHO).\nNa mesma rede funciona direto; pela internet, o anfitrião precisa liberar a porta UDP " + NetSession.Port + " no roteador.", 24, Dim, TextAnchor.MiddleCenter); Size(info, 1000, 80);
+        Btn(col, "HOSPEDAR PARTIDA", () => { if (NetSession.Instance) NetSession.Instance.Host(); RefreshOnline(); }, 560, 84, true);
+        Spacer(col, 8);
+        var joinRow = RowGroup("Join", col, 1000, 84, 20);
+        var bg = Img("IP Field", joinRow, new Color(1, 1, 1, 0.10f), round);
+        var le = bg.gameObject.AddComponent<LayoutElement>(); le.preferredWidth = 560; le.preferredHeight = 76;
+        var txt = Label(bg.transform, "", 34, Color.white, TextAnchor.MiddleLeft); Fill(txt.rectTransform); txt.rectTransform.offsetMin = new Vector2(24, 0); txt.supportRichText = false;
+        var ph = Label(bg.transform, "IP do anfitrião (ex.: 192.168.0.10)", 26, new Color(1, 1, 1, 0.35f), TextAnchor.MiddleLeft, FontStyle.Italic); Fill(ph.rectTransform); ph.rectTransform.offsetMin = new Vector2(24, 0);
+        ipField = bg.gameObject.AddComponent<InputField>(); ipField.textComponent = txt; ipField.placeholder = ph;
+        ipField.characterLimit = 39; ipField.contentType = InputField.ContentType.Standard;
+        try { ipField.text = PlayerPrefs.GetString("lastHostIP", ""); } catch { }
+        Btn(joinRow, "ENTRAR", Join, 300, 76, false);
+        onlineStatus = Label(col, "", 28, Accent, TextAnchor.MiddleCenter, FontStyle.Bold); Size(onlineStatus, 1000, 110);
+        Btn(col, "VOLTAR", () => { if (NetSession.Instance) NetSession.Instance.Shutdown(); online.SetActive(false); title.SetActive(true); Select(title); }, 300, 72, false, ghost: true);
+        online.SetActive(false);
+    }
+
+    void Join()
+    {
+        try { PlayerPrefs.SetString("lastHostIP", ipField.text.Trim()); } catch { }
+        if (NetSession.Instance) NetSession.Instance.Join(ipField.text);
+        RefreshOnline();
+    }
+
+    void OpenOnline()
+    {
+        title.SetActive(false); online.SetActive(true);
+        NetSession.Status = "Seu IP: " + NetSession.LocalIP();
+        RefreshOnline(); Select(online);
+    }
+
+    void LeaveOnline()
+    {
+        if (NetSession.Instance) NetSession.Instance.Shutdown();
+        setup.SetActive(false); robots.SetActive(false); title.SetActive(false);
+        online.SetActive(true); RefreshOnline(); Select(online);
+    }
+
+    void RefreshOnline() { if (onlineStatus) onlineStatus.text = NetSession.Status; }
+
+    // Connection events: a player joined (host -> setup), connected (joiner -> robots), or the link dropped.
+    void OnNetChanged()
+    {
+        RefreshOnline();
+        if (mm == null || mm.state != MatchManager.State.Menu) return;
+        if (NetSession.Online && NetSession.PeerConnected)
+        {
+            GameConfig.players = GameConfig.Players.Two; GameConfig.kind = GameConfig.Kind.QuickMatch;
+            if (online.activeSelf || title.activeSelf)
+            {
+                online.SetActive(false); title.SetActive(false);
+                if (NetSession.IsHost) { setup.SetActive(true); RefreshSetup(); Select(setup); }
+                else { robots.SetActive(true); RefreshSetup(); Select(robots); }
+            }
+            else RefreshSetup();
+        }
+        else if (setup.activeSelf || robots.activeSelf)
+        {
+            if (NetSession.IsHost) { setup.SetActive(false); robots.SetActive(false); online.SetActive(true); }   // waiting for a new player
+            else if (!NetSession.Online && GameConfig.players == GameConfig.Players.Two && wasOnlineScreen) { setup.SetActive(false); robots.SetActive(false); online.SetActive(true); }
+            RefreshOnline();
+        }
+        wasOnlineScreen = NetSession.Online || online.activeSelf;
+    }
+    bool wasOnlineScreen;
 
     void OpenRobots()
     {
@@ -253,7 +339,11 @@ public class GameUI : MonoBehaviour
         mm.StartMatch();
     }
 
-    void ToMenu() { mm.QuitToMenu(); }
+    void ToMenu()
+    {
+        if (NetSession.IsClient) { NetSession.Instance.Shutdown(); mm.QuitToMenu(); online.SetActive(true); RefreshOnline(); return; }
+        mm.QuitToMenu();
+    }
 
     static void Quit()
     {
@@ -267,12 +357,16 @@ public class GameUI : MonoBehaviour
     void RefreshSetup()
     {
         bool one = GameConfig.players == GameConfig.Players.One;
-        setupHeader.text = one ? "1 JOGADOR" : "2 JOGADORES";
+        setupHeader.text = NetSession.IsHost ? "ONLINE · ANFITRIÃO" : one ? "1 JOGADOR" : "2 JOGADORES";
         foreach (var r in rows) { r.row.SetActive(r.visible()); r.value.text = r.get(); }
         foreach (var d in dyn) { d.text.gameObject.SetActive(d.visible()); d.text.text = d.get(); }
         bool ok = GameConfig.WithinBudget(true) && GameConfig.WithinBudget(false);
-        if (startButton) startButton.interactable = ok;
-        if (robotsHint) robotsHint.text = !ok ? "Um time passou do limite de peso: troque um robô mais pesado."
+        if (startButton) { startButton.interactable = ok && (!NetSession.IsHost || NetSession.PeerConnected); startButton.gameObject.SetActive(!NetSession.IsClient); }
+        foreach (var sb in slotButtons)
+            foreach (var b in sb.buttons) b.interactable = !NetSession.Online || (NetSession.IsHost ? sb.blue : !sb.blue);
+        if (NetSession.IsHost && NetSession.Instance) NetSession.Instance.SendConfig();
+        if (robotsHint) robotsHint.text = NetSession.IsClient ? "Arena: " + ArenaTheme.Names[GameConfig.arena] + " · " + (GameConfig.RobotsPerTeam == 3 ? "3 x 3" : "1 x 1") + " · aguardando o anfitrião começar…"
+            : !ok ? "Um time passou do limite de peso: troque um robô mais pesado."
             : GameConfig.players == GameConfig.Players.One ? "Ferramenta: Espaço ou Enter" : "Ferramenta: AZUL Espaço · VERMELHO Enter";
         bool tour = one && GameConfig.kind == GameConfig.Kind.Tournament;
         ladderText.gameObject.SetActive(tour);
@@ -292,8 +386,19 @@ public class GameUI : MonoBehaviour
     {
         var s = mm.state;
         bool menu = s == MatchManager.State.Menu;
-        if (menu) { if (!setup.activeSelf && !robots.activeSelf) { title.SetActive(true); Select(title); } }
-        else { title.SetActive(false); setup.SetActive(false); robots.SetActive(false); }
+        if (menu)
+        {
+            if (NetSession.Online && NetSession.PeerConnected)
+            {
+                if (!setup.activeSelf && !robots.activeSelf)
+                {
+                    var screen = NetSession.IsHost ? setup : robots;
+                    screen.SetActive(true); RefreshSetup(); Select(screen);
+                }
+            }
+            else if (!setup.activeSelf && !robots.activeSelf && !online.activeSelf) { title.SetActive(true); Select(title); }
+        }
+        else { title.SetActive(false); setup.SetActive(false); robots.SetActive(false); online.SetActive(false); }
         hud.SetActive(!menu);
         pause.SetActive(s == MatchManager.State.Paused);
         result.SetActive(s == MatchManager.State.Result);
@@ -311,7 +416,13 @@ public class GameUI : MonoBehaviour
     {
         bool one = GameConfig.players == GameConfig.Players.One;
         bool blueWon = mm.matchWinner == MatchManager.Team.Blue;
-        if (one)
+        if (NetSession.Online)
+        {
+            bool won = blueWon == NetSession.IsHost;
+            resultTitle.text = won ? "VITÓRIA!" : "DERROTA";
+            resultTitle.color = blueWon ? MatchManager.BlueColor : MatchManager.RedColor;
+        }
+        else if (one)
         {
             resultTitle.text = mm.TournamentWon ? "CAMPEÃO!" : blueWon ? "VITÓRIA!" : "DERROTA";
             resultTitle.color = blueWon ? MatchManager.BlueColor : MatchManager.RedColor;
@@ -330,8 +441,8 @@ public class GameUI : MonoBehaviour
                 : "Torneio · partida " + (GameConfig.stage + 1) + " de " + GameConfig.Ladder.Length + " · " + ArenaTheme.Names[st.arena] + " (" + GameConfig.Name(st.diff) + ")";
         }
         else resultInfo.text = one ? ArenaTheme.Names[GameConfig.arena] + " · " + GameConfig.Name(GameConfig.difficulty) : ArenaTheme.Names[GameConfig.arena];
-        btnNext.SetActive(mm.TournamentNextAvailable);
-        btnAgain.SetActive(!mm.TournamentWon);
+        btnNext.SetActive(mm.TournamentNextAvailable && !NetSession.Online);
+        btnAgain.SetActive(!mm.TournamentWon && !NetSession.IsClient);
         btnAgainLabel.text = tour && !blueWon ? "TENTAR DE NOVO" : "JOGAR DE NOVO";
     }
 
@@ -370,7 +481,8 @@ public class GameUI : MonoBehaviour
             else { var c = bannerText.color; c.a = Mathf.Clamp01(left / 0.4f); bannerText.color = c; }
         }
         if (setup.activeSelf && Input.GetKeyDown(KeyCode.Escape)) { setup.SetActive(false); title.SetActive(true); Select(title); }
-        else if (robots.activeSelf && Input.GetKeyDown(KeyCode.Escape)) { robots.SetActive(false); setup.SetActive(true); RefreshSetup(); Select(setup); }
+        else if (robots.activeSelf && Input.GetKeyDown(KeyCode.Escape) && !NetSession.IsClient) { robots.SetActive(false); setup.SetActive(true); RefreshSetup(); Select(setup); }
+        else if (online.activeSelf && Input.GetKeyDown(KeyCode.Escape) && !ipField.isFocused) { LeaveOnline(); online.SetActive(false); title.SetActive(true); Select(title); }
     }
 
     // ---- small UI kit ------------------------------------------------------------------------

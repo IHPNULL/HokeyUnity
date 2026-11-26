@@ -22,6 +22,7 @@ public class puck : MonoBehaviour
 
     void CheckGoal(string goalName)
     {
+        if (!enabled) return;   // online joiner: the host decides goals (trigger messages reach disabled scripts)
         if (goalName == "gol") { enter = true; marcadorazul.pontosazul++; ResetToCenter(); }
         else if (goalName == "gol (1)") { enter = true; marcadorverm.pontosverm++; ResetToCenter(); }
     }

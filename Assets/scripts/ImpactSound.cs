@@ -71,8 +71,20 @@ public class ImpactSound : MonoBehaviour
         src.PlayOneShot(set[Random.Range(0, set.Length)], Volume * Mathf.Lerp(0.25f, 1f, t));
         lastTime = Time.time;
         LastPlayed = set == heavyClang ? "clang" : set == clink ? "clink" : "clank";
+        NetSession.SendEvent(NetSession.Ev.Impact, "", default, (byte)(set == heavyClang ? 0 : set == clink ? 2 : 1), Volume * Mathf.Lerp(0.25f, 1f, t));
         LastPair = name + "/" + c.GetContact(0).thisCollider.name + " <-> " + c.collider.name + " n=" + c.GetContact(0).normal.ToString("F2") + " v=" + speed.ToString("F0");
         PlayCount++;
+    }
+
+    // Online joiner: the host's impacts (0 clang, 1 clank, 2 clink).
+    static AudioSource remote;
+    public static void PlayRemote(byte kind, float volume)
+    {
+        if (heavyClang == null) BuildClips();
+        if (remote == null) { var go = new GameObject("Remote Impacts"); remote = go.AddComponent<AudioSource>(); remote.playOnAwake = false; remote.spatialBlend = 0f; }
+        var set = kind == 0 ? heavyClang : kind == 2 ? clink : clank;
+        remote.pitch = Random.Range(0.92f, 1.08f);
+        remote.PlayOneShot(set[Random.Range(0, set.Length)], volume);
     }
 
     // For tests.

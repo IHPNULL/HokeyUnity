@@ -43,6 +43,8 @@ public class MatchManager : MonoBehaviour
     public int RobotsPerTeam => GameConfig.format == GameConfig.Format.ThreeVsThree ? 3 : 1;
     public GameObject[] TeamRobots(Team t) => teams[(int)t];
     public int HumanIndex(Team t) => human[(int)t];
+    public GameObject Puck => puckGo;
+    public void RaiseBanner(string text, Color c) => Banner?.Invoke(text, c);
     int seenRed, seenBlue;
     State beforePause;
     float menuAngle;
@@ -54,6 +56,8 @@ public class MatchManager : MonoBehaviour
     void Awake()
     {
         Instance = this;
+        if (!GetComponent<NetSession>()) gameObject.AddComponent<NetSession>();
+        Banner += (t, c) => NetSession.SendEvent(NetSession.Ev.Banner, t, c);   // host -> joiner
         jogando = Find("JOGANDO");
         red = Find("unidadeverm"); blue = Find("Unidadeazul"); puckGo = Find("PUCK");
         redCam = red.GetComponentInChildren<Camera>(true); blueCam = blue.GetComponentInChildren<Camera>(true);
@@ -136,6 +140,7 @@ public class MatchManager : MonoBehaviour
         foreach (var tm in teams) foreach (var r in tm) if (r.TryGetComponent(out AIRobotInput a)) a.enabled = false;
         SetCameras(menu: true);
         SetState(State.Menu);
+        if (NetSession.IsHost && NetSession.Instance) NetSession.Instance.SendConfig();
     }
 
     public void StartMatch()
@@ -149,7 +154,8 @@ public class MatchManager : MonoBehaviour
         AudioListener.volume = GameConfig.volume;
 
         ApplyFormat();
-        bool onePlayer = GameConfig.players == GameConfig.Players.One;
+        if (NetSession.IsClient) return;   // the host runs the match
+        bool onePlayer = GameConfig.players == GameConfig.Players.One && !NetSession.Online;
         human[0] = onePlayer ? -1 : 0; human[1] = 0;
         attacker[0] = attacker[1] = -1;
         for (int t = 0; t < 2; t++)
@@ -164,6 +170,7 @@ public class MatchManager : MonoBehaviour
 
         periodsRed = periodsBlue = 0; period = 0; matchWinner = null;
         NextPeriod();
+        if (NetSession.IsHost && NetSession.Instance) NetSession.Instance.SendConfig();
     }
 
     void NextPeriod()
@@ -184,9 +191,10 @@ public class MatchManager : MonoBehaviour
 
     AIRobotInput Ai(GameObject r) => r.TryGetComponent(out AIRobotInput a) ? a : r.AddComponent<AIRobotInput>();
 
-    KeyboardRobotInput Keys(int t)
+    IRobotInput Keys(int t)
     {
-        if (GameConfig.players == GameConfig.Players.One)
+        if (NetSession.IsHost && t == 0 && NetSession.Instance) return NetSession.Instance.Remote;   // the joiner
+        if (GameConfig.players == GameConfig.Players.One || NetSession.Online)
             return new KeyboardRobotInput(new[] { "Horizontal", "Horizontal2" }, new[] { "Vertical", "Vertical2" }, new[] { KeyCode.Space, KeyCode.Return, KeyCode.KeypadEnter });
         var m = teams[t][0].GetComponent<moverp1>();
         // Tool key: blue Space, red Enter (Mac keyboards have no right Ctrl).
@@ -203,7 +211,7 @@ public class MatchManager : MonoBehaviour
             var r = teams[t][i]; var m = r.GetComponent<moverp1>(); var a = Ai(r);
             bool me = i == h;
             a.enabled = !me;
-            m.input = me ? Keys(t) : (IRobotInput)a;
+            m.input = me ? Keys(t) : a;
         }
     }
 
@@ -259,6 +267,7 @@ public class MatchManager : MonoBehaviour
 
     public void TogglePause()
     {
+        if (NetSession.Online) return;   // no pausing someone else's game
         if (state == State.Paused) { Time.timeScale = 1f; SetState(beforePause, keepTime: true); }
         else if (state == State.Playing || state == State.Countdown || state == State.GoalPause)
         { beforePause = state; Time.timeScale = 0f; SetState(State.Paused, keepTime: true); }
@@ -286,6 +295,7 @@ public class MatchManager : MonoBehaviour
             if (Input.GetKeyDown(KeyCode.RightShift)) SwitchRobot(GameConfig.players == GameConfig.Players.One ? Team.Blue : Team.Red);
         }
         float dt = Time.unscaledDeltaTime;
+        if (NetSession.IsClient && remoteView) { SmoothRemote(); if (state != State.Menu) return; }
         if (state != State.Paused) stateTime += Time.deltaTime;
 
         switch (state)
@@ -430,15 +440,75 @@ public class MatchManager : MonoBehaviour
     void SetCameras(bool menu)
     {
         if (menuCam) menuCam.gameObject.SetActive(menu);
-        bool one = GameConfig.players == GameConfig.Players.One;
+        bool online = NetSession.Online;
+        bool one = GameConfig.players == GameConfig.Players.One || online;   // one full-screen view
+        int myTeam = NetSession.IsClient ? 0 : 1;
         for (int t = 0; t < 2; t++)
             for (int i = 0; i < 3; i++)
             {
                 var cam = teams[t][i].GetComponentInChildren<Camera>(true); if (!cam) continue;
-                bool on = !menu && i == human[t] && (t == 1 || !one);
+                bool teamShown = online ? t == myTeam : (t == 1 || !one);
+                bool on = !menu && i == human[t] && teamShown;
                 cam.gameObject.SetActive(on);
-                cam.rect = t == 1 ? (one ? new Rect(0, 0, 1, 1) : blueRect) : redRect;
+                cam.rect = one ? new Rect(0, 0, 1, 1) : t == 1 ? blueRect : redRect;
             }
         blueCam = teams[1][Mathf.Max(0, human[1])].GetComponentInChildren<Camera>(true);
+    }
+
+    // ---- online: the joiner shows the host's snapshots ---------------------------------------
+
+    bool remoteView;
+    readonly Vector3[] netPos = new Vector3[7]; readonly Quaternion[] netRot = new Quaternion[7];
+    bool netHasPose;
+
+    // Joiner: robots and puck stop simulating and follow the host.
+    public void SetRemoteView(bool on)
+    {
+        remoteView = on; netHasPose = false;
+        foreach (var tm in teams)
+            foreach (var r in tm)
+            {
+                var rb = r.GetComponent<Rigidbody>();
+                rb.isKinematic = on; rb.interpolation = on ? RigidbodyInterpolation.None : RigidbodyInterpolation.Interpolate;
+                foreach (var b in new Behaviour[] { r.GetComponent<moverp1>(), r.GetComponent<RobotTools>() }) if (b) b.enabled = !on;
+                if (r.TryGetComponent(out AIRobotInput a)) a.enabled = false;
+            }
+        var prb = puckGo.GetComponent<Rigidbody>();
+        prb.isKinematic = on; prb.interpolation = on ? RigidbodyInterpolation.None : RigidbodyInterpolation.Interpolate;
+        if (puckGo.TryGetComponent(out puck pk)) pk.enabled = !on;
+        if (on) { moverp1.Frozen = true; human[0] = 0; human[1] = 0; SetCameras(menu: false); }
+    }
+
+    public void NetApply(State s, float sTime, float clk, int per, int pr, int pb, int gr, int gb, bool sudden, Team? winner,
+                         int hr, int hb, NetSession.RobotState[] robots, Vector3 puckPos, Quaternion puckRot)
+    {
+        bool camChange = hr != human[0] || hb != human[1];
+        human[0] = hr; human[1] = hb;
+        clock = clk; period = per; periodsRed = pr; periodsBlue = pb; suddenDeath = sudden; matchWinner = winner;
+        marcadorverm.pontosverm = gr; marcadorazul.pontosazul = gb; SyncSeen();
+        if (s != state) { SetState(s); camChange = true; }
+        stateTime = sTime;
+        for (int i = 0; i < 6; i++)
+        {
+            var r = teams[i / 3][i % 3];
+            if (r.activeSelf != robots[i].active) r.SetActive(robots[i].active);
+            netPos[i] = robots[i].pos; netRot[i] = robots[i].rot;
+            if (r.TryGetComponent(out RobotTools tl) && tl.flames != null) foreach (var f in tl.flames) if (f) f.gameObject.SetActive(robots[i].boost);
+        }
+        netPos[6] = puckPos; netRot[6] = puckRot;
+        if (!netHasPose) { netHasPose = true; SmoothRemote(1f); }
+        if (camChange) SetCameras(menu: s == State.Menu);
+    }
+
+    // Ease toward the latest snapshot (snapshots arrive ~25/s; frames are faster).
+    void SmoothRemote(float k = -1f)
+    {
+        if (!netHasPose) return;
+        if (k < 0) k = 1f - Mathf.Exp(-Time.unscaledDeltaTime * 18f);
+        for (int i = 0; i < 7; i++)
+        {
+            var tr = i < 6 ? teams[i / 3][i % 3].transform : puckGo.transform;
+            tr.SetPositionAndRotation(Vector3.Lerp(tr.position, netPos[i], k), Quaternion.Slerp(tr.rotation, netRot[i], k));
+        }
     }
 }
