@@ -1,6 +1,7 @@
 using UnityEngine;
 
 public enum RobotTool { None, Claw, Booster, Plow, Kicker, Magnets }
+public enum RobotBodyKit { None, Claw, Racer, Armor, Cannon, Coils }   // extra bodywork on the standard chassis
 
 // One playable robot. Add a robot = add one of these assets to Assets/Resources/Robots
 // (Create > Hockey > Robot). Stats are multipliers on the standard chassis.
@@ -20,8 +21,9 @@ public class RobotSpec : ScriptableObject
     [Range(0.6f, 1.5f)] public float strength = 1f;  // acceleration and how hard it hits the puck
     public RobotTool tool;
 
-    [Header("Look (optional)")]
-    public GameObject model;                 // replaces the standard chassis visuals when set
+    [Header("Look")]
+    public RobotBodyKit body;
+    public GameObject model;                 // optional: replaces the standard chassis visuals                 // replaces the standard chassis visuals when set
 
     public string ToolName => Tools.Name(tool);
 }

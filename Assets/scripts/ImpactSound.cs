@@ -67,11 +67,15 @@ public class ImpactSound : MonoBehaviour
         else set = clank;
 
         float t = Mathf.InverseLerp(MinSpeed, FullSpeed, speed);
+        var contact = c.GetContact(0);
+        bool metal = set != clink;   // robot on robot / robot on boards
+        if (metal && speed > 400f) FxPool.Sparks(contact.point, contact.normal, t);
         src.pitch = Random.Range(0.92f, 1.08f) * Mathf.Lerp(0.95f, 1.05f, t);
-        src.PlayOneShot(set[Random.Range(0, set.Length)], Volume * Mathf.Lerp(0.25f, 1f, t));
+        src.PlayOneShot(Clip(set), Volume * Mathf.Lerp(0.25f, 1f, t));
         lastTime = Time.time;
         LastPlayed = set == heavyClang ? "clang" : set == clink ? "clink" : "clank";
-        NetSession.SendEvent(NetSession.Ev.Impact, "", default, (byte)(set == heavyClang ? 0 : set == clink ? 2 : 1), Volume * Mathf.Lerp(0.25f, 1f, t));
+        NetSession.SendEvent(NetSession.Ev.Impact, metal && speed > 400f ? "s" + t.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) : "", default,
+            (byte)(set == heavyClang ? 0 : set == clink ? 2 : 1), Volume * Mathf.Lerp(0.25f, 1f, t), contact.point);   // "s<strength>": sparks
         LastPair = name + "/" + c.GetContact(0).thisCollider.name + " <-> " + c.collider.name + " n=" + c.GetContact(0).normal.ToString("F2") + " v=" + speed.ToString("F0");
         PlayCount++;
     }
@@ -84,7 +88,15 @@ public class ImpactSound : MonoBehaviour
         if (remote == null) { var go = new GameObject("Remote Impacts"); remote = go.AddComponent<AudioSource>(); remote.playOnAwake = false; remote.spatialBlend = 0f; }
         var set = kind == 0 ? heavyClang : kind == 2 ? clink : clank;
         remote.pitch = Random.Range(0.92f, 1.08f);
-        remote.PlayOneShot(set[Random.Range(0, set.Length)], volume);
+        remote.PlayOneShot(Clip(set), volume);
+    }
+
+    // The sound bank's recorded hits when there are any, else the synthesized ones.
+    static AudioClip Clip(AudioClip[] synth)
+    {
+        var b = SoundBank.Get();
+        var c = b == null ? null : SoundBank.Pick(synth == heavyClang ? b.robotCrash : synth == clink ? b.puckHit : b.robotBoards);
+        return c ? c : synth[Random.Range(0, synth.Length)];
     }
 
     // For tests.

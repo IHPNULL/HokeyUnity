@@ -56,6 +56,20 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         return oc + side * s * (r + 130f);
     }
 
+    // A spot between the puck and our net, reached without touching the puck: if the straight
+    // path would brush past it, swing wide around its side first.
+    static Vector3 GoalSide(Vector3 me, Vector3 p, Vector3 toOwn)
+    {
+        Vector3 side = Vector3.Cross(Vector3.up, toOwn);
+        float s = Mathf.Sign(Vector3.Dot(me - p, side)); if (s == 0) s = 1;
+        Vector3 spot = p + toOwn * 200f;
+        Vector3 seg = spot - me; float len = seg.magnitude;
+        float along = len > 1f ? Mathf.Clamp(Vector3.Dot(p - me, seg / len), 0f, len) : 0f;
+        Vector3 closest = me + (len > 1f ? seg / len : Vector3.zero) * along;
+        if (Vector3.Distance(closest, p) < 170f) return p + side * s * 250f + toOwn * 40f;   // around, not through
+        return spot;
+    }
+
     // True when nothing static (boards, goal frame) is within dist of p along dir.
     bool Clear(Vector3 p, Vector3 dir, float dist)
     {
@@ -109,7 +123,9 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         for (int i = 0; i < Offsets.Length && !room; i++)
         {
             var d = Quaternion.Euler(0, Offsets[i], 0) * wanted;
-            if (Clear(p, -d, Behind + RobotBack)) { shotDir = d; room = true; }
+            // Room behind the puck: nothing in the way and the setup spot inside the (round-cornered) rink.
+            var setup = p - d * (Behind + RobotBack);
+            if (Clear(p, -d, Behind + RobotBack) && Vector3.Distance(RinkBuilder.ClampInside(setup, 40f), setup) < 25f) { shotDir = d; room = true; }
         }
         Vector3 behind = p - shotDir * Behind;
 
@@ -129,9 +145,7 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         else if (!room)
         {
             // Pinned puck and we're on the wrong side of it: get between it and our net first.
-            Vector3 side = Vector3.Cross(Vector3.up, toOwn);
-            float s = Mathf.Sign(Vector3.Dot(me - p, side)); if (s == 0) s = 1;
-            target = Vector3.Distance(me, p) < 220f ? p + side * s * 200f + toOwn * 60f : p + toOwn * 200f;
+            target = GoalSide(me, p, toOwn);
             lined = false; wrongSide = true;
         }
         else if (lined) target = p + shotDir * 200f;             // charge through the puck
@@ -152,6 +166,11 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         bool defend = Vector3.Dot(pv, outward) > 350f && !goalSide;
         bool sprint = defend;   // racing the puck back to our net: every difficulty hustles
         if (defend) { target = og - outward * 200f + Vector3.forward * Mathf.Clamp(p.z - og.z, -180f, 180f); lined = false; }
+
+        // Puck loose near our net and we're on the wrong side of it: get goal-side first
+        // (swinging around it there is how a missed shot's rebound ends up in our own net).
+        bool danger = !defend && !goalSide && (p - og).magnitude < 650f * Rink.Scale.x;
+        if (danger) { target = GoalSide(me, p, toOwn); lined = false; }
 
         // Team roles (3x3). A defender or supporter still plays the puck when it comes close.
         float puckDist = Vector3.Distance(me, p);
@@ -179,12 +198,47 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         bool inNet = Vector3.Dot(me - og, outward) > -40f;
         if (inNet) { target = og - outward * 260f; lined = false; }
 
-        Mode = inNet ? "exit" : carry ? "carry" : role == Role.Support && puckDist > 300f ? "support" : defend ? "defend" : !room ? (ramHome ? "goal-side" : "ram") : lined ? "charge" : wrongSide ? "around" : "behind";
+        Mode = inNet ? "exit" : carry ? "carry" : role == Role.Support && puckDist > 300f ? "support" : defend ? "defend" : danger ? "goal-side" : !room ? (ramHome ? "goal-side" : "ram") : lined ? "charge" : wrongSide ? "around" : "behind";
 
         target = AvoidObstacles(me, target);
 
         target.x = Mathf.Clamp(target.x, Rink.MinX + 60f, Rink.MaxX - 60f);
         target.z = Mathf.Clamp(target.z, Rink.MinZ + 60f, Rink.MaxZ - 60f);
+        target = RinkBuilder.ClampInside(target, 70f);   // the corners are round
+
+        // Reflex (no reaction delay): about to bump the puck toward our own net -> sidestep and ease off.
+        bool reflex = false;
+        {
+            Vector3 rp = PuckPos; rp.y = 0;
+            Vector3 toP = rp - me; float dp = toP.magnitude;
+            Vector3 myV = body ? body.linearVelocity : Vector3.zero; myV.y = 0;
+            if (!carry && dp < 260f && dp > 1f && myV.magnitude > 120f && Vector3.Dot(myV.normalized, toP / dp) > 0.5f
+                && Vector3.Dot(toP / dp, (og - rp).normalized) > 0.35f)
+            {
+                // Go past the puck on its far side (toward our net), not into it.
+                Vector3 side = Vector3.Cross(Vector3.up, toP / dp);
+                float s = Vector3.Dot(me - rp, side) >= 0f ? 1f : -1f;   // the side we're already on
+                target = RinkBuilder.ClampInside(rp + side * s * 190f + (og - rp).normalized * 150f, 70f);
+                reflex = true; lined = false;
+            }
+        }
+        if (reflex) Mode = "dodge";
+
+        // Goalkeeper reflex (real puck, no reaction delay): puck close to our net and drifting in ->
+        // block the goal line between the puck and the net.
+        bool keeper = false;
+        if (puckBody != null)
+        {
+            Vector3 rp = PuckPos; rp.y = 0; Vector3 rv = puckBody.linearVelocity; rv.y = 0;
+            Vector3 toNet = og - rp; float dn = toNet.magnitude;
+            if (!carry && dn < 520f && Vector3.Dot(rv, toNet / Mathf.Max(dn, 1f)) > 100f && Vector3.Distance(me, og) > Vector3.Distance(rp, og) - 30f)
+            {
+                Vector3 block = og - outward * 70f + Vector3.forward * Mathf.Clamp(rp.z - og.z, -200f, 200f);
+                // Reach the block point around the puck's far side, never through it.
+                target = RinkBuilder.ClampInside(GoalSide(me, rp, (og - rp).normalized) * 0.4f + block * 0.6f, 60f);
+                keeper = true; lined = false; Mode = "keeper";
+            }
+        }
         Target = target;
 
         Vector3 to = target - me;
@@ -195,6 +249,8 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
         // Turning circle at full speed is ~vel/turnRate; slow down when the target is inside it.
         float turnRadius = mostradado.speed * speedFraction * 0.02f / (Mathf.Max(1, mostradado.rotaao) * Mathf.Deg2Rad);   // rotaao = deg per 50 Hz step
         if (Mathf.Abs(angle) > 30f && to.magnitude < turnRadius * 1.6f) drive *= 0.35f;
+        if (reflex) drive = Mathf.Max(drive, 0.8f);   // overtake, don't hang back
+        if (keeper) drive = Mathf.Max(drive, 0.9f);
 
         // Unstick: pinned against a wall or the other robot.
         float moved = (me - lastPos).magnitude / Mathf.Max(Time.fixedDeltaTime, 1e-4f);
@@ -217,7 +273,7 @@ public class AIRobotInput : MonoBehaviour, IRobotInput
             }
         Action = act;
 
-        Drive = drive * (sprint && role != Role.Defend ? Mathf.Max(speedFraction, 0.9f) : speedFraction);
+        Drive = drive * ((sprint || keeper) && role != Role.Defend ? Mathf.Max(speedFraction, 0.9f) : speedFraction);
         Turn = turn;
     }
 }

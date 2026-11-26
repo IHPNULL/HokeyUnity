@@ -22,7 +22,7 @@ public class NetTest
         yield return null; yield return null;
         Find("ONLINE Button").GetComponent<UnityEngine.UI.Button>().onClick.Invoke(); yield return null;
         Assert.IsTrue(Find("Online").activeInHierarchy, "online screen");
-        Find("HOSPEDAR PARTIDA Button").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+        Find("HOSPEDAR NA REDE (IP) Button").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
         yield return new WaitForSeconds(0.5f);
         Assert.AreEqual("Host", Role);
         var status = (string)T("NetSession").GetField("Status").GetValue(null);

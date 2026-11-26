@@ -10,6 +10,9 @@ public class PhysicsProbeTest
 {
     static GameObject Find(string name) => Resources.FindObjectsOfTypeAll<GameObject>().First(g => g.name == name && g.scene.IsValid());
     static System.Type T(string n) => System.Type.GetType(n + ", Assembly-CSharp");
+    static Vector3 W(float x, float z, float y = 0f) => (Vector3)System.Type.GetType("Rink, Assembly-CSharp").GetMethod("W").Invoke(null, new object[] { x, z, y });   // scene -> stretched rink
+    static float Rk(string p) => (float)System.Type.GetType("Rink, Assembly-CSharp").GetProperty(p).GetValue(null);
+
 
     GameObject puck, red, blue;
     Rigidbody prb;
@@ -50,13 +53,14 @@ public class PhysicsProbeTest
     {
         yield return Setup();
         red.SetActive(false); blue.SetActive(false);
-        // Post of the +x goal stands at the goal mouth (x≈1656), z≈130. Shoot straight at it from the rink.
+        // Post of the +x goal stands at the goal mouth, z≈130 (goals keep their real size). Shoot straight at it.
+        float mouth = Find("gol Visual").transform.position.x;
         var score = T("marcadorazul").GetField("pontosazul"); int before = (int)score.GetValue(null);
-        yield return Shoot(new Vector3(1400, 0, 130), new Vector3(1000, 0, 0), 0.45f);
+        yield return Shoot(new Vector3(mouth - 256, 0, 130), new Vector3(1000, 0, 0), 0.45f);
         Debug.Log($"PROBE post: puck x={prb.position.x:F0} vx={prb.linearVelocity.x:F0}");
         Assert.AreEqual(before, (int)score.GetValue(null), "hitting the post must not count as a goal");
         Assert.Less(prb.linearVelocity.x, -100f, "puck should bounce back off the post");
-        Assert.Less(prb.position.x, 1656f, "puck passed through the goal post");
+        Assert.Less(prb.position.x, mouth, "puck passed through the goal post");
     }
 
     [UnityTest]
@@ -65,7 +69,7 @@ public class PhysicsProbeTest
         yield return Setup();
         red.SetActive(false); blue.SetActive(false);
         // Side board near z≈-130 (rink spans z≈-130..930). Shoot at it at 45 degrees.
-        yield return Shoot(new Vector3(634, 0, 300), new Vector3(700, 0, -700), 0.9f);
+        yield return Shoot(W(634, 100), new Vector3(700, 0, -700), 0.9f);
         Debug.Log($"PROBE boards: puck z={prb.position.z:F0} vz={prb.linearVelocity.z:F0} speed={prb.linearVelocity.magnitude:F0}");
         Assert.Greater(prb.linearVelocity.z, 150f, "puck should rebound off the boards (moving back toward the rink)");
     }

@@ -12,6 +12,9 @@ public class RobotsTest
     static GameObject Find(string name) => Resources.FindObjectsOfTypeAll<GameObject>().First(g => g.name == name && g.scene.IsValid());
     static System.Type T(string n) => System.Type.GetType(n + ", Assembly-CSharp");
     const BindingFlags All = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    static Vector3 W(float x, float z, float y = 0f) => (Vector3)System.Type.GetType("Rink, Assembly-CSharp").GetMethod("W").Invoke(null, new object[] { x, z, y });   // scene -> stretched rink
+    static float Rk(string p) => (float)System.Type.GetType("Rink, Assembly-CSharp").GetProperty(p).GetValue(null);
+
 
     object mm;
     void Call(string m, params object[] a) => mm.GetType().GetMethod(m, All).Invoke(mm, a);
@@ -73,14 +76,14 @@ public class RobotsTest
         Assert.AreEqual(13f, rb.mass, 0.01f);
         Assert.AreEqual(125f, blue.transform.lossyScale.x, 0.5f);
         Assert.AreEqual(0.8f, (float)Get(m, "speedMul"), 0.001f);
-        var blade = blue.transform.Find("Loadout/Blade");
-        Assert.IsNotNull(blade, "plow blade"); Assert.IsNotNull(blade.GetComponent<Collider>(), "blade is solid");
+        var blade = Part("Unidadeazul", "Blade");
+        Assert.IsNotNull(blade, "plow blade"); Assert.IsNotNull(Part("Unidadeazul", "Blade Collider").GetComponent<Collider>(), "blade is solid");
 
         Picks(true)[0] = "omega"; Call("ApplyLoadouts"); yield return null;
         Assert.AreEqual(8f, rb.mass, 0.01f);
         Assert.AreEqual(100f, blue.transform.lossyScale.x, 0.5f);
-        Assert.IsNull(blue.transform.Find("Loadout/Blade"), "old tool removed");
-        Assert.IsNotNull(blue.transform.Find("Loadout/Finger"), "claw fingers");
+        Assert.IsNull(Part("Unidadeazul", "Blade"), "old tool removed");
+        Assert.IsNotNull(Part("Unidadeazul", "Finger"), "claw fingers");
     }
 
     [UnityTest]
@@ -183,7 +186,7 @@ public class RobotsTest
         yield return StartAndPlay();
         var red = Find("unidadeverm"); var blue = Find("Unidadeazul");
         ((Behaviour)blue.GetComponent(T("moverp1"))).enabled = false;
-        var brb = blue.GetComponent<Rigidbody>(); brb.position = new Vector3(600, brb.position.y, 850);
+        var brb = blue.GetComponent<Rigidbody>(); brb.position = W(600, 850, brb.position.y);
         Time.timeScale = 3f;
         float t = 0; int score() => (int)T("marcadorverm").GetField("pontosverm").GetValue(null);
         while (score() == 0 && t < 90f) { t += Time.deltaTime; yield return null; }
@@ -191,5 +194,97 @@ public class RobotsTest
         Debug.Log($"PROBE AI kicker: scored after {t:F1}s, kicks {Get(Tools(red), "Uses")}");
         Assert.Greater(score(), 0, "AI with a kicker scores");
         Assert.Greater((int)Get(Tools(red), "Uses"), 0, "AI used the kicker");
+    }
+
+    static Transform Part(string robot, string part) => Find(robot).transform.Find("Loadout").GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == part);
+
+    [UnityTest]
+    public IEnumerator DetailsBodyworkNumbersWheelsAndPaint()
+    {
+        yield return Load("Two", "ThreeVsThree");
+        Call("ApplyLoadouts"); yield return null;
+        Assert.IsNotNull(Part("Unidadeazul", "Claw Piston"), "Ômega claw pistons");
+        Assert.IsNotNull(Part("Unidadeazul 2", "Fin"), "Faísca fin"); Assert.IsNotNull(Part("Unidadeazul 2", "Spoiler"), "Faísca spoiler");
+        Assert.IsNotNull(Part("Unidadeazul 3", "Armor Plate"), "Trator armor"); Assert.IsNotNull(Part("Unidadeazul 3", "Roll Bar"), "Trator roll bar");
+        Assert.IsNotNull(Part("unidadeverm 2", "Barrel"), "Canhão barrel");
+        Assert.IsNotNull(Part("unidadeverm 3", "Coil"), "Ímã coils");
+        Assert.IsNull(Part("Unidadeazul 3", "Number Plate"), "no square plate on top");
+        Assert.IsFalse(Find("Unidadeazul").transform.Find("Cube").GetComponent<Renderer>().enabled, "small square block hidden");
+        foreach (var r in new[] { "Unidadeazul", "unidadeverm 3" })
+            Assert.AreEqual(2, Find(r).transform.Find("Loadout").GetComponentsInChildren<Transform>(true).Count(t => t.name == "Wheel Pivot"), r + " wheels");
+        var bluePaint = Find("Unidadeazul").transform.Find("Body1 1").GetComponent<Renderer>().sharedMaterial.GetColor("_BaseColor");
+        var redPaint = Find("unidadeverm").transform.Find("Body1 1").GetComponent<Renderer>().sharedMaterial.GetColor("_BaseColor");
+        Assert.Greater(bluePaint.b, bluePaint.r, "blue paint"); Assert.Greater(redPaint.r, redPaint.b, "red paint");
+
+        // Wheels roll while driving.
+        yield return StartAndPlay();
+        var blue = Find("Unidadeazul"); var rb = blue.GetComponent<Rigidbody>();
+        ((Behaviour)blue.GetComponent(T("moverp1"))).enabled = false;
+        var fx = blue.GetComponent(T("RobotFx"));
+        float a0 = (float)Get(fx, "WheelAngle");
+        var fwd = -blue.transform.up; fwd.y = 0; fwd.Normalize();
+        for (int i = 0; i < 25; i++) { rb.linearVelocity = fwd * 800f; yield return new WaitForFixedUpdate(); }
+        float a1 = (float)Get(fx, "WheelAngle");
+        Debug.Log($"PROBE wheels: rolled {a1 - a0:F0} deg in 0.5 s at 800");
+        Assert.Greater(Mathf.Abs(a1 - a0), 300f, "wheels spin with speed");
+
+        // Hard stop: the body dives forward.
+        float maxPitch = 0;
+        for (int i = 0; i < 20; i++) { rb.linearVelocity = Vector3.zero; yield return null; maxPitch = Mathf.Max(maxPitch, ((Vector2)Get(fx, "Tilt")).x); }
+        Debug.Log($"PROBE tilt: nose dive {maxPitch:F1} deg on a hard stop");
+        Assert.Greater(maxPitch, 2f, "body tilts on braking");
+    }
+
+    [UnityTest]
+    public IEnumerator CrashesThrowSparksAndBoosterFlames()
+    {
+        yield return Load();
+        Picks(true)[0] = "faisca";
+        yield return StartAndPlay();
+        var red = Find("unidadeverm"); var blue = Find("Unidadeazul");
+        var rrb = red.GetComponent<Rigidbody>(); var brb = blue.GetComponent<Rigidbody>();
+        rrb.position = new Vector3(634, rrb.position.y, 400); rrb.linearVelocity = Vector3.zero;
+        brb.position = new Vector3(634, brb.position.y, 160);
+        yield return new WaitForFixedUpdate();
+        brb.linearVelocity = new Vector3(0, 0, 1600);
+        int sparks = 0;
+        for (int i = 0; i < 40 && sparks == 0; i++) { yield return null; sparks = (int)T("FxPool").GetProperty("SparkCount").GetValue(null); }
+        Debug.Log("PROBE sparks: " + sparks);
+        Assert.Greater(sparks, 0, "robot crash throws sparks");
+
+        Trigger(blue);
+        yield return new WaitForSeconds(0.25f);
+        var boost = Part("Unidadeazul", "Boost Particles").GetComponent<ParticleSystem>();
+        Debug.Log("PROBE boost particles: " + boost.particleCount);
+        Assert.Greater(boost.particleCount, 0, "booster flames");
+    }
+
+    // Screenshot only (PROBE_DIR): the five robots lined up, from the front and from behind.
+    [UnityTest]
+    public IEnumerator RobotShowcase()
+    {
+        var dir = System.Environment.GetEnvironmentVariable("PROBE_DIR");
+        if (dir == null) { Assert.Pass("no PROBE_DIR"); yield break; }
+        yield return Load("Two", "ThreeVsThree");
+        Cfg("redRobots", new[] { "canhao", "ima", "omega" });
+        Call("ApplyLoadouts"); yield return null;
+        Find("UI Canvas").SetActive(false);
+        var names = new[] { "Unidadeazul", "Unidadeazul 2", "Unidadeazul 3", "unidadeverm", "unidadeverm 2" };
+        for (int i = 0; i < names.Length; i++)
+        {
+            var r = Find(names[i]); var rb = r.GetComponent<Rigidbody>();
+            var pos = new Vector3(634 + (i - 2) * 260f, rb.position.y, 400);
+            var rot = Quaternion.FromToRotation(-r.transform.up, Vector3.back) * r.transform.rotation;   // nose toward -z (camera side)
+            rb.position = pos; rb.rotation = rot; r.transform.SetPositionAndRotation(pos, rot);
+        }
+        var cam = new GameObject("Probe Cam").AddComponent<Camera>(); cam.depth = 100; cam.fieldOfView = 40; cam.farClipPlane = 10000;
+        foreach (var (name, p) in new[] { ("robots_front", new Vector3(634, 300, -450)), ("robots_back", new Vector3(634, 340, 1150)) })
+        {
+            cam.transform.position = p; cam.transform.LookAt(new Vector3(634, 20, 400));
+            yield return new WaitForSeconds(0.2f);
+            yield return new WaitForEndOfFrame();
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(dir, name + ".png"), ScreenCapture.CaptureScreenshotAsTexture().EncodeToPNG());
+        }
+        Object.Destroy(cam.gameObject);
     }
 }

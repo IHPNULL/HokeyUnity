@@ -19,11 +19,13 @@ public static class GameSfx
     }
 
     // Each also reaches the joiner in an online match (NetSession ignores it when not hosting).
-    public static void Kick() { Play(beep, 0.3f); NetSession.SendEvent(NetSession.Ev.Kick); }
-    public static void Horn() { Play(horn, 0.9f); NetSession.SendEvent(NetSession.Ev.Horn); }
-    public static void Buzzer() { Play(buzzer, 0.7f); NetSession.SendEvent(NetSession.Ev.Buzzer); }
-    public static void Beep() { Play(beep, 0.6f); NetSession.SendEvent(NetSession.Ev.Beep); }
-    public static void Go() { Play(go, 0.7f); NetSession.SendEvent(NetSession.Ev.Go); }
+    static AudioClip Bank(System.Func<SoundBank, AudioClip> f, AudioClip fallback) { var b = SoundBank.Get(); var c = b ? f(b) : null; return c ? c : fallback; }
+
+    public static void Kick(Vector3 at) { Play(Bank(b => b.kick, beep), 0.5f); FxPool.Flash(at, new Color(1f, 0.85f, 0.5f)); NetSession.SendEvent(NetSession.Ev.Kick, pos: at); }
+    public static void Horn() { Play(Bank(b => b.goalHorn, horn), 0.9f); NetSession.SendEvent(NetSession.Ev.Horn); }
+    public static void Buzzer() { Play(Bank(b => b.periodBuzzer, buzzer), 0.7f); NetSession.SendEvent(NetSession.Ev.Buzzer); }
+    public static void Beep() { Play(Bank(b => b.countdownBeep, beep), 0.6f); NetSession.SendEvent(NetSession.Ev.Beep); }
+    public static void Go() { Play(Bank(b => b.countdownGo, go), 0.7f); NetSession.SendEvent(NetSession.Ev.Go); }
 
     static void Play(AudioClip c, float v) { if (src && c) src.PlayOneShot(c, v); }
 

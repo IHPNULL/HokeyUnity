@@ -10,6 +10,9 @@ public class ImpactSoundTest
 {
     static GameObject Find(string name) => Resources.FindObjectsOfTypeAll<GameObject>().First(g => g.name == name && g.scene.IsValid());
     static System.Type T(string n) => System.Type.GetType(n + ", Assembly-CSharp");
+    static Vector3 W(float x, float z, float y = 0f) => (Vector3)System.Type.GetType("Rink, Assembly-CSharp").GetMethod("W").Invoke(null, new object[] { x, z, y });   // scene -> stretched rink
+    static float Rk(string p) => (float)System.Type.GetType("Rink, Assembly-CSharp").GetProperty(p).GetValue(null);
+
     static object S(string field) => T("ImpactSound").GetField(field, BindingFlags.Public | BindingFlags.Static).GetValue(null);
 
     [UnityTest]
@@ -34,7 +37,7 @@ public class ImpactSoundTest
 
         yield return new WaitForSeconds(0.3f);
         // The puck now rebounds off the solid hull; park it away from the crash lane.
-        prb.linearVelocity = Vector3.zero; prb.position = new Vector3(634f, prb.position.y, 850f);
+        prb.linearVelocity = Vector3.zero; prb.position = W(634f, 850f, prb.position.y);
         yield return new WaitForSeconds(0.2f);
         before = (int)S("PlayCount");
         var brb = blue.GetComponent<Rigidbody>();

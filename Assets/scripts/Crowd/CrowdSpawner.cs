@@ -110,6 +110,16 @@ public class CrowdSpawner : MonoBehaviour
         if (n > 0) Graphics.RenderMeshInstanced(rp, mesh, 0, buf, n);
     }
 
+    // A recorded cheer can be long: fade it out after the cheer window.
+    void LateUpdate()
+    {
+        if (roar && roar.isPlaying && Time.time > cheerUntil)
+        {
+            roar.volume = Mathf.MoveTowards(roar.volume, 0f, Time.deltaTime * crowdVolume / 1.2f);
+            if (roar.volume <= 0.001f) roar.Stop();
+        }
+    }
+
     public void Cheer(int team)
     {
         cheeringTeam = team; cheerUntil = Time.time + cheerSeconds;
@@ -120,10 +130,11 @@ public class CrowdSpawner : MonoBehaviour
     void SetupAudio()
     {
         murmur = gameObject.AddComponent<AudioSource>();
-        murmur.clip = Noise("crowd_murmur", 8f, 0.25f, 0.06f, loopable: true);
+        var bank = SoundBank.Get();
+        murmur.clip = bank && bank.crowdAmbience ? bank.crowdAmbience : Noise("crowd_murmur", 8f, 0.25f, 0.06f, loopable: true);
         murmur.loop = true; murmur.spatialBlend = 0f; murmur.volume = crowdVolume * 0.5f; murmur.Play();
         roar = gameObject.AddComponent<AudioSource>();
-        roar.clip = Noise("crowd_roar", cheerSeconds, 0.55f, 0.18f, loopable: false);
+        roar.clip = bank && bank.crowdCheer ? bank.crowdCheer : Noise("crowd_roar", cheerSeconds, 0.55f, 0.18f, loopable: false);
         roar.spatialBlend = 0f; roar.playOnAwake = false;
     }
 

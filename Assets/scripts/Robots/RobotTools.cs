@@ -80,7 +80,7 @@ public class RobotTools : MonoBehaviour
         Vector3 v = Forward * speed * spec.strength + Vector3.ProjectOnPlane(body.linearVelocity, Vector3.up) * 0.5f;
         v.y = 0;
         p.linearVelocity = v;
-        GameSfxHook.Kick?.Invoke();
+        GameSfxHook.Kick?.Invoke(p.position);
     }
 
     // Is the point inside the pocket between the arms (reach scales the depth past the arm tips)?
@@ -125,4 +125,4 @@ public class RobotTools : MonoBehaviour
 }
 
 // Optional sound hook (GameSfx sets it) so the tool code doesn't depend on the audio code.
-public static class GameSfxHook { public static System.Action Kick; }
+public static class GameSfxHook { public static System.Action<Vector3> Kick; }

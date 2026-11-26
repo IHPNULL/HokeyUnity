@@ -61,3 +61,11 @@ crashlytics-build.properties
 /[Uu]ser[Ss]ettings/
 .vscode/
 *.slnx
+
+# Free Unity Asset Store audio packs: imported by tools/import-audio.sh, not redistributed here
+/[Aa]ssets/Free Game Music Collection*
+/[Aa]ssets/Gregor Quendel - Free Crowd Cheering Sounds*
+/[Aa]ssets/Score and Times - Game Sound Solutions*
+/[Aa]ssets/Epic Game Hits SFX*
+/[Aa]ssets/FREE SOUND PACK_TM(355)*
+/[Aa]ssets/TOOLKIT_vol.2*

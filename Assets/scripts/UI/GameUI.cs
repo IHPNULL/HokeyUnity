@@ -185,14 +185,16 @@ public class GameUI : MonoBehaviour
         var pr = panel.rectTransform; pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f); pr.sizeDelta = new Vector2(1100, 780);
         var col = Column("Col", panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(1000, 720), 18);
         var h = Label(col, "JOGAR ONLINE", 60, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold); Size(h, 1000, 84);
-        var info = Label(col, "Um jogador hospeda (AZUL) e o outro entra pelo IP (VERMELHO).\nNa mesma rede funciona direto; pela internet, o anfitrião precisa liberar a porta UDP " + NetSession.Port + " no roteador.", 24, Dim, TextAnchor.MiddleCenter); Size(info, 1000, 80);
-        Btn(col, "HOSPEDAR PARTIDA", () => { if (NetSession.Instance) NetSession.Instance.Host(); RefreshOnline(); }, 560, 84, true);
+        var info = Label(col, "Um jogador hospeda (AZUL) e o outro entra (VERMELHO).\nPelo CÓDIGO funciona pela internet, sem configurar o roteador. Na mesma rede também dá pelo IP.", 24, Dim, TextAnchor.MiddleCenter); Size(info, 1000, 80);
+        var hostRow = RowGroup("Host", col, 1000, 84, 20);
+        Btn(hostRow, "HOSPEDAR (CÓDIGO)", () => { if (NetSession.Instance) NetSession.Instance.HostWithCode(); RefreshOnline(); }, 520, 84, true);
+        Btn(hostRow, "HOSPEDAR NA REDE (IP)", () => { if (NetSession.Instance) NetSession.Instance.Host(); RefreshOnline(); }, 440, 84, false);
         Spacer(col, 8);
         var joinRow = RowGroup("Join", col, 1000, 84, 20);
         var bg = Img("IP Field", joinRow, new Color(1, 1, 1, 0.10f), round);
         var le = bg.gameObject.AddComponent<LayoutElement>(); le.preferredWidth = 560; le.preferredHeight = 76;
         var txt = Label(bg.transform, "", 34, Color.white, TextAnchor.MiddleLeft); Fill(txt.rectTransform); txt.rectTransform.offsetMin = new Vector2(24, 0); txt.supportRichText = false;
-        var ph = Label(bg.transform, "IP do anfitrião (ex.: 192.168.0.10)", 26, new Color(1, 1, 1, 0.35f), TextAnchor.MiddleLeft, FontStyle.Italic); Fill(ph.rectTransform); ph.rectTransform.offsetMin = new Vector2(24, 0);
+        var ph = Label(bg.transform, "Código (ex.: K7Q2XA) ou IP do anfitrião", 26, new Color(1, 1, 1, 0.35f), TextAnchor.MiddleLeft, FontStyle.Italic); Fill(ph.rectTransform); ph.rectTransform.offsetMin = new Vector2(24, 0);
         ipField = bg.gameObject.AddComponent<InputField>(); ipField.textComponent = txt; ipField.placeholder = ph;
         ipField.characterLimit = 39; ipField.contentType = InputField.ContentType.Standard;
         try { ipField.text = PlayerPrefs.GetString("lastHostIP", ""); } catch { }
@@ -205,7 +207,7 @@ public class GameUI : MonoBehaviour
     void Join()
     {
         try { PlayerPrefs.SetString("lastHostIP", ipField.text.Trim()); } catch { }
-        if (NetSession.Instance) NetSession.Instance.Join(ipField.text);
+        if (NetSession.Instance) NetSession.Instance.JoinAuto(ipField.text);
         RefreshOnline();
     }
 

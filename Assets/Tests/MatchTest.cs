@@ -13,6 +13,9 @@ public class MatchTest
     static GameObject Find(string name) => Resources.FindObjectsOfTypeAll<GameObject>().First(g => g.name == name && g.scene.IsValid());
     static System.Type T(string n) => System.Type.GetType(n + ", Assembly-CSharp");
     const BindingFlags All = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    static Vector3 W(float x, float z, float y = 0f) => (Vector3)System.Type.GetType("Rink, Assembly-CSharp").GetMethod("W").Invoke(null, new object[] { x, z, y });   // scene -> stretched rink
+    static float Rk(string p) => (float)System.Type.GetType("Rink, Assembly-CSharp").GetProperty(p).GetValue(null);
+
 
     object mm;
     object P(string name) => mm.GetType().GetProperty(name, All).GetValue(mm);
@@ -141,10 +144,10 @@ public class MatchTest
 
         // Idle player parked out of the way; the AI must score.
         ((Behaviour)blue.GetComponent(T("moverp1"))).enabled = false;
-        var brb = blue.GetComponent<Rigidbody>(); brb.position = new Vector3(600, brb.position.y, 850);
+        var brb = blue.GetComponent<Rigidbody>(); brb.position = W(600, 850, brb.position.y);
         var prb = Find("PUCK").GetComponent<Rigidbody>();
-        if (spot == "ownCorner") prb.position = new Vector3(1500, prb.position.y, 60);     // deep in the AI's own end
-        if (spot == "farCorner") prb.position = new Vector3(-250, prb.position.y, 820);    // corner beside the target goal
+        if (spot == "ownCorner") prb.position = W(1500, 60, prb.position.y);     // deep in the AI's own end
+        if (spot == "farCorner") prb.position = W(-250, 820, prb.position.y);    // corner beside the target goal
         prb.linearVelocity = Vector3.zero;
         Time.timeScale = 3f;
         var trace = new System.Text.StringBuilder();
@@ -167,7 +170,8 @@ public class MatchTest
         // A puck rebounding off the far post or boards can occasionally beat the AI back to its own net.
         Assert.LessOrEqual(Score("marcadorazul", "pontosazul"), 1, "AI own goals");   // a missed shot can rebound the length of the rink once in a while (the test player is idle)
         Assert.Greater(Score("marcadorverm", "pontosverm"), 0, "AI did not score within 90 s");
-        Assert.Greater(minX, -450f); Assert.Less(maxX, 1880f);   // may skid into its own net mouth on ice (then the exit rule drives it out) Assert.Greater(minZ, -180f); Assert.Less(maxZ, 980f);
+        // Inside the rink; it may skid into its own net mouth on ice (then the exit rule drives it out).
+        Assert.Greater(minX, W(-450, 0).x); Assert.Less(maxX, W(1656, 0).x + 230f); Assert.Greater(minZ, W(0, -180).z); Assert.Less(maxZ, W(0, 980).z);
         Call("QuitToMenu");
     }
 
@@ -182,7 +186,7 @@ public class MatchTest
         Call("StartMatch");
         var reds = Robots("Red"); var blues = Robots("Blue");
         Assert.AreEqual(3, reds.Count(r => r.activeInHierarchy)); Assert.AreEqual(3, blues.Count(r => r.activeInHierarchy));
-        Assert.Greater(Find("gol").transform.position.x, 1950f, "3x3 rink is longer");
+        Assert.Greater(Find("gol Visual").transform.position.x, 2200f, "3x3 rink is longer");
         Assert.Greater(Find("PUCK").transform.lossyScale.x, 59f); Assert.Less(Find("PUCK").transform.lossyScale.x, 61f);
         yield return WaitState("Playing", 5);
         yield return new WaitForSeconds(0.5f);
@@ -210,12 +214,12 @@ public class MatchTest
         Time.timeScale = 1f;
         Debug.Log($"3x3: red {Score("marcadorverm", "pontosverm")} blue {Score("marcadorazul", "pontosazul")} after {t:F1}s, x {minX:F0}..{maxX:F0} z {minZ:F0}..{maxZ:F0} puck{path}");
         Assert.Greater(Score("marcadorverm", "pontosverm") + Score("marcadorazul", "pontosazul"), 0, "no goal in 120 s of 3x3");
-        Assert.Greater(minX, -1130f); Assert.Less(maxX, 2380f); Assert.Greater(minZ, -330f); Assert.Less(maxZ, 1130f);   // rink incl. the nets
+        Assert.Greater(minX, W(-400, 0).x - 230f); Assert.Less(maxX, W(1656, 0).x + 230f); Assert.Greater(minZ, W(0, -180).z); Assert.Less(maxZ, W(0, 980).z);   // rink incl. the nets
 
         Call("QuitToMenu");
         Cfg("format", "OneVsOne"); Call("ApplyFormat");
         Assert.IsFalse(reds[1].activeInHierarchy, "extra robots hidden in 1x1");
-        Assert.Less(Find("gol").transform.position.x, 1800f);
+        Assert.Less(Find("gol Visual").transform.position.x, 2000f, "1x1 rink is shorter than 3x3");
     }
 
     [UnityTest]
@@ -245,7 +249,7 @@ public class MatchTest
     {
         yield return Load();
         var theme = T("ArenaTheme");
-        var floor = Find("Plane").GetComponent<Renderer>();
+        var floor = Find("Rink Floor").GetComponent<Renderer>();
         var puckRb = Find("PUCK").GetComponent<Rigidbody>();
         string[] mats = new string[3]; float[] drag = new float[3]; bool[] pillars = new bool[3]; float[] grip = new float[3];
         for (int i = 0; i < 3; i++)

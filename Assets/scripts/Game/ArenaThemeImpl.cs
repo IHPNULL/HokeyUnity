@@ -74,7 +74,8 @@ public static partial class ArenaTheme
     {
         if (cached && floor) return true;
         var plane = FindPath("JOGANDO/arena/Plane"); if (!plane) return false;
-        floor = plane.GetComponent<Renderer>(); woodMat = floor.sharedMaterial;
+        woodMat = plane.GetComponent<Renderer>().sharedMaterial;
+        floor = RinkBuilder.Floor ? RinkBuilder.Floor : plane.GetComponent<Renderer>();   // the generated rounded floor
         floorCol = plane.GetComponent<Collider>(); woodPhys = floorCol.sharedMaterial;
         icePhys = new PhysicsMaterial("Ice") { dynamicFriction = 0.03f, staticFriction = 0.03f, bounciness = 0f, frictionCombine = PhysicsMaterialCombine.Minimum };
         key = FindPath("JOGANDO/Lighting/Key Light").GetComponent<Light>();
@@ -133,6 +134,7 @@ public static partial class ArenaTheme
         q.transform.SetParent(parent, false);
         q.transform.SetPositionAndRotation(new Vector3(x, Center.y + 0.6f, Center.z), Quaternion.Euler(90, 0, 0));
         q.transform.localScale = new Vector3(width, 1000f, 1);
+        Rink.KeepSize(q.transform, keepX: true, keepZ: false);   // thickness stays, length spans the rink
         var r = q.GetComponent<Renderer>(); r.sharedMaterial = m; r.shadowCastingMode = ShadowCastingMode.Off;
     }
 
@@ -152,6 +154,7 @@ public static partial class ArenaTheme
         var go = new GameObject("Center Circle", typeof(MeshFilter), typeof(MeshRenderer));
         go.transform.SetParent(parent, false); go.transform.position = c + Vector3.up * 0.6f;
         go.GetComponent<MeshFilter>().sharedMesh = mesh;
+        Rink.KeepSize(go.transform);   // stays round
         var r = go.GetComponent<MeshRenderer>(); r.sharedMaterial = m; r.shadowCastingMode = ShadowCastingMode.Off;
     }
 
@@ -199,6 +202,7 @@ public static partial class ArenaTheme
             Object.Destroy(c.GetComponent<Collider>());
             var col = c.AddComponent<CapsuleCollider>(); col.radius = 0.5f; col.height = 2f; col.sharedMaterial = boards;
             c.GetComponent<Renderer>().sharedMaterial = steel;
+            Rink.KeepSize(c.transform);   // stays round; spreads out with the rink
         }
         root.SetActive(false);
         return root;

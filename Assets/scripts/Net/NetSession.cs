@@ -5,7 +5,9 @@ using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine;
 
-// Online play, peer to peer by IP: one player hosts (blue), the other joins (red).
+// Online play: one player hosts (blue), the other joins (red). Two ways to connect:
+//   - join code (Unity Relay): works over the internet through any router, no port forwarding;
+//   - direct IP (same network, or port 7777 forwarded).
 // The host runs the whole game (physics, AI, rules); the joiner sends its keys and robot picks
 // and shows the host's snapshots. Netcode for GameObjects is only the connection layer here:
 // everything travels as named messages, so the scene needs no NetworkObjects.
@@ -20,6 +22,8 @@ public class NetSession : MonoBehaviour
 
     public const ushort Port = 7777;
     public static string Status = "";
+    public static string JoinCode { get; private set; } = "";   // host via Relay: share this
+    public static bool Busy { get; private set; }               // signing in / allocating
     public static bool PeerConnected { get; private set; }   // host: a player joined / client: connected to the host
     public static int SnapshotsReceived { get; private set; }
     public static event Action Changed;                       // UI refresh
@@ -72,12 +76,71 @@ public class NetSession : MonoBehaviour
     {
         Shutdown();
         var m = Manager();
-        transport.SetConnectionData("0.0.0.0", Port, "0.0.0.0");
+        transport.SetConnectionData("0.0.0.0", Port, "0.0.0.0");   // (also clears a previous Relay setup)
         if (!m.StartHost()) { Status = "Não foi possível abrir a porta " + Port; Changed?.Invoke(); return false; }
         role = Role.Host; Register();
         Status = "Aguardando um jogador… seu IP: " + LocalIP() + "  (porta " + Port + ")";
         Changed?.Invoke();
         return true;
+    }
+
+    // ---- Relay (join codes) --------------------------------------------------------------------
+
+    static async System.Threading.Tasks.Task SignIn()
+    {
+        if (Unity.Services.Core.UnityServices.State != Unity.Services.Core.ServicesInitializationState.Initialized)
+            await Unity.Services.Core.UnityServices.InitializeAsync();
+        var auth = Unity.Services.Authentication.AuthenticationService.Instance;
+        if (!auth.IsSignedIn) await auth.SignInAnonymouslyAsync();
+    }
+
+    public async void HostWithCode()
+    {
+        if (Busy) return;
+        Shutdown(); Busy = true; JoinCode = "";
+        Status = "Criando a partida…"; Changed?.Invoke();
+        try
+        {
+            await SignIn();
+            var alloc = await Unity.Services.Relay.RelayService.Instance.CreateAllocationAsync(1);
+            var code = await Unity.Services.Relay.RelayService.Instance.GetJoinCodeAsync(alloc.AllocationId);
+            var m = Manager();
+            transport.SetRelayServerData(Unity.Services.Relay.Models.AllocationUtils.ToRelayServerData(alloc, "dtls"));
+            if (!m.StartHost()) throw new Exception("não foi possível iniciar");
+            role = Role.Host; Register(); JoinCode = code;
+            Status = "Código da partida: " + code + "  (o outro jogador digita este código)";
+        }
+        catch (Exception e) { Status = "Falha ao criar a partida: " + Short(e); Debug.LogWarning("Relay host: " + e); }
+        Busy = false; Changed?.Invoke();
+    }
+
+    public async void JoinWithCode(string code)
+    {
+        if (Busy) return;
+        code = (code ?? "").Trim().ToUpperInvariant();
+        Shutdown(); Busy = true;
+        Status = "Entrando com o código " + code + "…"; Changed?.Invoke();
+        try
+        {
+            await SignIn();
+            var join = await Unity.Services.Relay.RelayService.Instance.JoinAllocationAsync(code);
+            var m = Manager();
+            transport.SetRelayServerData(Unity.Services.Relay.Models.AllocationUtils.ToRelayServerData(join, "dtls"));
+            if (!m.StartClient()) throw new Exception("não foi possível conectar");
+            role = Role.Client; Register();
+            Status = "Conectando…";
+        }
+        catch (Exception e) { Status = "Código inválido ou sem conexão: " + Short(e); Debug.LogWarning("Relay join: " + e); }
+        Busy = false; Changed?.Invoke();
+    }
+
+    static string Short(Exception e) { var m = e.InnerException?.Message ?? e.Message; return m.Length > 90 ? m.Substring(0, 90) + "…" : m; }
+
+    // Join field: an IP address joins directly, anything else is a join code.
+    public void JoinAuto(string text)
+    {
+        text = (text ?? "").Trim();
+        if (System.Net.IPAddress.TryParse(text, out _)) Join(text); else JoinWithCode(text);
     }
 
     public bool Join(string ip)
@@ -98,7 +161,7 @@ public class NetSession : MonoBehaviour
     {
         if (nm && (nm.IsListening || nm.ShutdownInProgress)) nm.Shutdown();
         bool wasClient = IsClient;
-        role = Role.Offline; PeerConnected = false; clientInMatch = false; SnapshotsReceived = 0;
+        role = Role.Offline; PeerConnected = false; clientInMatch = false; SnapshotsReceived = 0; JoinCode = "";
         if (wasClient && MatchManager.Instance) MatchManager.Instance.SetRemoteView(false);
         Changed?.Invoke();
     }
@@ -255,18 +318,18 @@ public class NetSession : MonoBehaviour
     // Banners and sounds the joiner should hear.
     public enum Ev : byte { Banner, Horn, Buzzer, Beep, Go, Kick, Impact }
 
-    public static void SendEvent(Ev e, string text = "", Color color = default, byte a = 0, float v = 0)
+    public static void SendEvent(Ev e, string text = "", Color color = default, byte a = 0, float v = 0, Vector3 pos = default)
     {
         var s = Instance; if (!IsHost || s == null || !PeerConnected) return;
         using var w = new FastBufferWriter(256, Allocator.Temp);
-        w.WriteValueSafe((byte)e); w.WriteValueSafe(text ?? ""); w.WriteValueSafe(color); w.WriteValueSafe(a); w.WriteValueSafe(v);
+        w.WriteValueSafe((byte)e); w.WriteValueSafe(text ?? ""); w.WriteValueSafe(color); w.WriteValueSafe(a); w.WriteValueSafe(v); w.WriteValueSafe(pos);
         s.nm.CustomMessagingManager.SendNamedMessage(MsgEvent, s.peer, w, e == Ev.Impact || e == Ev.Kick ? NetworkDelivery.Unreliable : NetworkDelivery.Reliable);
     }
 
     void OnEvent(ulong sender, FastBufferReader r)
     {
         if (!IsClient) return;
-        r.ReadValueSafe(out byte e); r.ReadValueSafe(out string text); r.ReadValueSafe(out Color color); r.ReadValueSafe(out byte a); r.ReadValueSafe(out float v);
+        r.ReadValueSafe(out byte e); r.ReadValueSafe(out string text); r.ReadValueSafe(out Color color); r.ReadValueSafe(out byte a); r.ReadValueSafe(out float v); r.ReadValueSafe(out Vector3 pos);
         switch ((Ev)e)
         {
             case Ev.Banner: if (MatchManager.Instance) MatchManager.Instance.RaiseBanner(text, color); break;
@@ -274,8 +337,11 @@ public class NetSession : MonoBehaviour
             case Ev.Buzzer: GameSfx.Buzzer(); break;
             case Ev.Beep: GameSfx.Beep(); break;
             case Ev.Go: GameSfx.Go(); break;
-            case Ev.Kick: GameSfx.Kick(); break;
-            case Ev.Impact: ImpactSound.PlayRemote(a, v); break;
+            case Ev.Kick: GameSfx.Kick(pos); break;
+            case Ev.Impact:
+                ImpactSound.PlayRemote(a, v);
+                if (text.StartsWith("s") && float.TryParse(text.Substring(1), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var st)) FxPool.Sparks(pos, Vector3.up, st);
+                break;
         }
     }
 

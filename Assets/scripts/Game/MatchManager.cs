@@ -77,8 +77,9 @@ public class MatchManager : MonoBehaviour
         teams[0] = new[] { red, Clone(red, 2), Clone(red, 3) };
         teams[1] = new[] { blue, Clone(blue, 2), Clone(blue, 3) };
         AudioListener.volume = GameConfig.volume;
-        Rink.Scale = Vector2.one;               // arena decorations are built at 1x1 size
+        Rink.Scale = Vector2.one;               // arena decorations are built at the scene's size
         if (arena) arena.localScale = Vector3.one;
+        SetupRealSizeGoals();
         ArenaTheme.Apply(GameConfig.arena);
         ApplyFormat();
         GameSfx.Init(gameObject);
@@ -101,14 +102,45 @@ public class MatchManager : MonoBehaviour
     public void ApplyFormat()
     {
         bool big = GameConfig.format == GameConfig.Format.ThreeVsThree;
-        Rink.Scale = big ? Rink.BigScale : Vector2.one;
+        Rink.Scale = big ? Rink.BigScale : Rink.NormalScale;
         if (arena) arena.localScale = new Vector3(Rink.Scale.x, 1f, Rink.Scale.y);
-        if (placar) placar.position = placarPos + (big ? new Vector3(0, 0, -190f) : Vector3.zero);
+        Rink.ApplyKeeps();
+        RinkBuilder.Rebuild();
+        // Scoreboard pole on the near side: moves back with the boards; on the 3x3 rink there's no room.
+        if (placar)
+        {
+            placar.position = placarPos + new Vector3(0, 0, -(537f * (Rink.Scale.y - 1f) + 40f));
+            placar.gameObject.SetActive(!big);
+        }
         for (int i = 0; i < floods.Length; i++) { var f = floodPos[i]; floods[i].transform.position = Rink.W(f.x, f.z, f.y); }
         for (int t = 0; t < 2; t++)
             for (int i = 1; i < 3; i++) teams[t][i].SetActive(big);
         ApplyLoadouts();
         ResetRobots(); ResetPuck();
+    }
+
+    // Goals keep their real size on the stretched rink: each scoring trigger moves under its goal
+    // model, and the models undo the stretch. Board pieces fill the gap the stretched end-board
+    // opening leaves beside a goal.
+    void SetupRealSizeGoals()
+    {
+        foreach (var n in new[] { "gol", "gol (1)" })
+        {
+            var vis = arena ? arena.Find(n + " Visual") : null; var trig = arena ? arena.Find(n) : null;
+            if (!vis) continue;
+            if (trig) trig.SetParent(vis, true);
+            Rink.KeepSize(vis);
+        }
+        // Rounded boards and floor, generated per rink size (the scene's stretched boards and
+        // square floor are retired; the floor plane keeps only its collider).
+        var boards = arena ? arena.Find("policarbonato") : null;
+        var plane = arena ? arena.Find("Plane") : null;
+        RinkBuilder.Setup(jogando.transform,
+            plane ? plane.GetComponent<Renderer>().sharedMaterial : null,
+            boards ? boards.GetComponent<Renderer>().sharedMaterial : null,
+            boards ? boards.GetComponent<Collider>().sharedMaterial : null);
+        if (boards) { boards.GetComponent<Renderer>().enabled = false; boards.GetComponent<Collider>().enabled = false; }
+        if (plane) plane.GetComponent<Renderer>().enabled = false;
     }
 
     // Robot picks (GameConfig.blueRobots / redRobots) -> stats, size and tool on each robot.
@@ -117,7 +149,7 @@ public class MatchManager : MonoBehaviour
         for (int t = 0; t < 2; t++)
         {
             var ids = GameConfig.Robots(t == 1);
-            for (int i = 0; i < 3; i++) RobotLoadout.Apply(teams[t][i], RobotCatalog.Get(ids[i]));
+            for (int i = 0; i < 3; i++) RobotLoadout.Apply(teams[t][i], RobotCatalog.Get(ids[i]), i);
         }
     }
 
@@ -394,7 +426,15 @@ public class MatchManager : MonoBehaviour
     void SetState(State s, bool keepTime = false)
     {
         state = s;
-        if (music) music.volume = (s == State.Menu || s == State.Result) ? musicVolume : musicVolume * 0.3f;
+        if (music)
+        {
+            bool calm = s == State.Menu || s == State.Result;
+            music.volume = calm ? musicVolume : musicVolume * 0.45f;
+            // Menu track in the menus, the match track while playing (free Asset Store music).
+            var bank = SoundBank.Get();
+            var want = bank ? (calm ? bank.menuMusic : bank.matchMusic) : null;
+            if (want && music.clip != want && s != State.Paused) { music.clip = want; music.Play(); }
+        }
         if (s == State.Countdown) lastBeep = 0;
         if (!keepTime) stateTime = 0f;
         StateChanged?.Invoke();
@@ -411,7 +451,7 @@ public class MatchManager : MonoBehaviour
         bool big = RobotsPerTeam == 3;
         for (int i = 0; i < RobotsPerTeam; i++)
         {
-            Vector3 rp = redStart, bp = blueStart;
+            Vector3 rp = Rink.W(redStart.x, redStart.z, redStart.y), bp = Rink.W(blueStart.x, blueStart.z, blueStart.y);
             if (big)
             {
                 var s = RedSpots3[i];

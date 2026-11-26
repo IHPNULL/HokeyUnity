@@ -22,4 +22,5 @@ MonoBehaviour:
   size: 1.25
   strength: 1.3
   tool: 3
+  body: 3
   model: {fileID: 0}
