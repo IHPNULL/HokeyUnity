@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.4.1: hotfix
+
+### Fixes
+- **Puck no longer sticks to the floor.** In v1.4.0 the puck lost its low friction and
+  bounce, so it stopped dead and didn't rebound off the boards. The puck and boards physics
+  materials are now saved properly, and a test checks their values.
+- **AI no longer circles behind the goal.** When it carried the puck past the goal line,
+  it couldn't turn to aim and kept circling. It now backs out in front of the net first.
+- **Fewer AI own goals on ice.** The AI brakes in time on the slippery surface instead of
+  sliding into its own net, and gives the puck more room when it swings around behind it.
+
+### Tests
+- Steadier AI and countdown tests (they count game time, and ice gets a longer budget).
+
 ## v1.4.0: neon arena, new robots, 2x2
 
 ### Modes
